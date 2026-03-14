@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: dss_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: digitalspeedscope
+      POSTGRES_USER: dss
+      POSTGRES_PASSWORD: dss_password
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - dss_pgdata:/var/lib/postgresql/data
+
+volumes:
+  dss_pgdata:

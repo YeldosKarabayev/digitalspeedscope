@@ -1,0 +1,265 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MeasurementStatus {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+}
+
+model City {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  points Point[]
+}
+
+model Device {
+  id       String  @id @default(cuid())
+  uid      String  @unique
+  name     String?
+  isp      String?
+  isActive Boolean @default(true)
+
+  kind DeviceKind @default(GENERIC)
+
+  mikrotikHost       String?
+  mikrotikPort       Int?
+  mikrotikAuthMethod MikrotikAuthMethod?
+  mikrotikUsername   String?
+  mikrotikSecretRef  String? // ссылка на секрет (не пароль plaintext)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  point           Point?
+  measurements    Measurement[]
+  remoteSpeedJobs RemoteSpeedJob[]
+  incidents       Incident[]
+
+  health     DeviceHealth @default(ONLINE)
+  lastSeenAt DateTime?
+  lastIp     String?
+}
+
+model Point {
+  id   String  @id @default(cuid())
+  name String
+  lat  Decimal @db.Decimal(9, 6)
+  lng  Decimal @db.Decimal(9, 6)
+
+  cityId String
+  city   City   @relation(fields: [cityId], references: [id])
+
+  deviceId String? @unique
+  device   Device? @relation(fields: [deviceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  measurements Measurement[]
+  incidents    Incident[]
+  health       DeviceHealth  @default(ONLINE)
+  lastSeenAt   DateTime?
+
+  @@index([cityId])
+}
+
+model Measurement {
+  id String @id @default(cuid())
+
+  deviceId String
+  device   Device @relation(fields: [deviceId], references: [id])
+
+  pointId String?
+  point   Point?  @relation(fields: [pointId], references: [id])
+
+  downloadMbps Int
+  uploadMbps   Int
+  pingMs       Int
+
+  remoteSpeedJob RemoteSpeedJob?
+
+  status    MeasurementStatus
+  createdAt DateTime          @default(now())
+
+  packetLoss Float?
+  jitterMs   Int?
+
+  @@index([deviceId, createdAt])
+  @@index([pointId, createdAt])
+  @@index([createdAt])
+}
+
+model PortalSession {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  attempts   Int       @default(0)
+
+  ip        String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@index([expiresAt])
+}
+
+model PortalIdentity {
+  id         String   @id @default(cuid())
+  phone      String   @unique
+  verifiedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accesses PortalAccess[]
+}
+
+model PortalAccess {
+  id String @id @default(cuid())
+
+  identityId String
+  identity   PortalIdentity @relation(fields: [identityId], references: [id])
+
+  // для MVP: “навсегда” фиксируем устройство через fingerprint/cookieId
+  deviceKey String
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  ip        String?
+  userAgent String?
+
+  @@unique([identityId, deviceKey])
+  @@index([deviceKey])
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         UserRole @default(VIEWER)
+  isActive     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+model Incident {
+  id       String           @id @default(cuid())
+  type     IncidentType
+  severity IncidentSeverity
+  status   IncidentStatus   @default(OPEN)
+
+  title   String
+  details Json?
+
+  deviceId String?
+  device   Device? @relation(fields: [deviceId], references: [id])
+
+  pointId String?
+  point   Point?  @relation(fields: [pointId], references: [id])
+
+  dedupKey String @unique
+
+  openedAt DateTime  @default(now())
+  ackAt    DateTime?
+  closedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, severity, openedAt])
+  @@index([deviceId, status])
+  @@index([pointId, status])
+}
+
+enum DeviceHealth {
+  ONLINE
+  DEGRADED
+  OFFLINE
+}
+
+enum IncidentStatus {
+  OPEN
+  ACK
+  RESOLVED
+}
+
+enum IncidentSeverity {
+  P1
+  P2
+  P3
+  P4
+}
+
+enum IncidentType {
+  OFFLINE
+  HIGH_PING
+  LOW_DOWNLOAD
+  LOW_UPLOAD
+  PACKET_LOSS
+}
+
+enum DeviceKind {
+  GENERIC
+  MIKROTIK
+}
+
+enum MikrotikAuthMethod {
+  API
+  SSH
+}
+
+enum RemoteSpeedJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  TIMEOUT
+}
+
+model RemoteSpeedJob {
+  id String @id @default(cuid())
+
+  deviceId String
+  device   Device @relation(fields: [deviceId], references: [id])
+
+  status RemoteSpeedJobStatus @default(QUEUED)
+
+  progress Int?
+  phase    String?
+  message  String?
+
+  measurementId String?      @unique
+  measurement   Measurement? @relation(fields: [measurementId], references: [id])
+
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deviceId, createdAt])
+  @@index([status])
+}
