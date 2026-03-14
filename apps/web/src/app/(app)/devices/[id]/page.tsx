@@ -61,8 +61,13 @@ function healthBadgeClass(h: DeviceDetails["health"]) {
 
 export default function DeviceDetailsPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const id = String(params?.id ?? "");
+  const params = useParams();
+  const deviceId =
+    typeof params?.id === "string"
+      ? params.id
+      : Array.isArray(params?.id)
+        ? params.id[0]
+        : "";
 
   const [item, setItem] = React.useState<DeviceDetails | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -72,10 +77,12 @@ export default function DeviceDetailsPage() {
   const [removeOpen, setRemoveOpen] = React.useState(false);
 
   async function load() {
+    if (!deviceId) return;
+
     setErr(null);
     setLoading(true);
     try {
-      const json = await apiFetch<DetailsResponse>(`/devices/${id}`);
+      const json = await apiFetch<DetailsResponse>(`/devices/${deviceId}`);
       const device = "item" in json ? json.item : json;
       setItem(device);
     } catch (e: any) {
@@ -86,12 +93,13 @@ export default function DeviceDetailsPage() {
   }
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!deviceId) return;
     void load();
-  }, [id]);
+  }, [deviceId]);
 
   async function deleteDevice() {
-    await apiFetch(`/devices/${id}`, { method: "DELETE" });
+    if (!deviceId) return;
+    await apiFetch(`/devices/${deviceId}`, { method: "DELETE" });
     router.push("/devices");
   }
 
@@ -130,7 +138,7 @@ export default function DeviceDetailsPage() {
           {item ? (
             <Button
               className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-500"
-              onClick={() => router.push(`/devices/${item.id}/remote-speed`)}
+              onClick={() => router.push(`/devices/${deviceId}/remote-speed`)}
             >
               <Activity className="mr-2 h-4 w-4" />
               RemoteSpeed
@@ -214,8 +222,11 @@ export default function DeviceDetailsPage() {
           <div className="grid gap-3">
             <Button
               className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500"
-              disabled={!item}
-              onClick={() => item && router.push(`/devices/${item.id}/remote-speed`)}
+              disabled={!deviceId}
+              onClick={() => {
+                if (!deviceId) return;
+                router.push(`/devices/${deviceId}/remote-speed`);
+              }}
             >
               <Activity className="mr-2 h-4 w-4" />
               Открыть RemoteSpeed
@@ -250,8 +261,8 @@ export default function DeviceDetailsPage() {
         title="Редактировать устройство"
         initial={item}
         onSubmit={async (data) => {
-          if (!item) return;
-          await apiFetch(`/devices/${item.id}`, {
+          if (!deviceId) return;
+          await apiFetch(`/devices/${deviceId}`, {
             method: "PATCH",
             body: JSON.stringify(data),
           });
