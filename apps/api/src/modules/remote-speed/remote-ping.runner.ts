@@ -24,7 +24,7 @@ export class RemotePingRunner {
     const rows = Array.isArray(raw) ? raw : [raw];
 
     const times: number[] = [];
-    let packetLoss = 0;
+    let packetLoss: number | null = null;
 
     for (const row of rows) {
       if (!row || typeof row !== "object") continue;
@@ -43,7 +43,7 @@ export class RemotePingRunner {
 
     const pingMs = avg(times);
 
-    let jitterMs = 0;
+    let jitterMs: number | null = null;
     if (times.length > 1) {
       const diffs: number[] = [];
       for (let i = 1; i < times.length; i++) {
@@ -56,6 +56,7 @@ export class RemotePingRunner {
       pingMs,
       jitterMs,
       packetLoss,
+      samples: times.length,
       raw,
     };
   }

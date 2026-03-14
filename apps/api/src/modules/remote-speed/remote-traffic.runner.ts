@@ -26,6 +26,9 @@ export class RemoteTrafficRunner {
     const txBps = Number((row as any)["tx-bits-per-second"] ?? 0);
 
     return {
+      interfaceName,
+      rxBps,
+      txBps,
       downloadMbps: Math.round(rxBps / 1_000_000),
       uploadMbps: Math.round(txBps / 1_000_000),
       raw,

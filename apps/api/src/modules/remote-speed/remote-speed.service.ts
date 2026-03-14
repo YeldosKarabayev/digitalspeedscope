@@ -6,7 +6,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 export class RemoteSpeedService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createJob(deviceId: string) {
+  async createJob(deviceId: string, body: { target?: string; interfaceName?: string; count?: number; }) {
     const device = await this.prisma.device.findUnique({
       where: { id: deviceId },
     });

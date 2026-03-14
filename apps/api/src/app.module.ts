@@ -10,9 +10,8 @@ import { PortalModule } from "./modules/portal/portal.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { DevicesModule } from "./modules/devices/devices.module";
 import { MikrotikModule } from "./modules/mikrotik/mikrotik.module";
+import { RemoteSpeedModule } from "./modules/remote-speed/remote-speed.module";
 import { TestController } from "./test.controller";
-
-
 
 @Module({
   imports: [
@@ -20,6 +19,7 @@ import { TestController } from "./test.controller";
     ScheduleModule.forRoot(),
     MikrotikModule,
     DevicesModule,
+    RemoteSpeedModule,
     AuthModule,
     PrismaModule,
     DashboardModule,
@@ -28,6 +28,5 @@ import { TestController } from "./test.controller";
     PortalModule,
   ],
   controllers: [TestController],
-
 })
-export class AppModule { }
+export class AppModule {}

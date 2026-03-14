@@ -7,7 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Plus, RefreshCw, ArrowRight, Trash2, Pencil } from "lucide-react";
+import {
+  Plus,
+  RefreshCw,
+  ArrowRight,
+  Trash2,
+  Pencil,
+  Activity,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { DeviceFormDialog } from "@/components/devices/DeviceFormDialog";
 import { ConfirmDialog } from "@/components/devices/ConfirmDialog";
@@ -32,6 +39,7 @@ function healthLabel(h: DeviceListItem["health"]) {
   if (h === "DEGRADED") return "DEGRADED";
   return "OFFLINE";
 }
+
 function healthBadgeClass(h: DeviceListItem["health"]) {
   if (h === "ONLINE") return "border-emerald-500/25 bg-emerald-500/10 text-emerald-200";
   if (h === "DEGRADED") return "border-amber-500/25 bg-amber-500/10 text-amber-200";
@@ -62,7 +70,7 @@ export default function DevicesPage() {
   }
 
   React.useEffect(() => {
-    load();
+    void load();
   }, []);
 
   async function deleteDevice(id: string) {
@@ -75,21 +83,26 @@ export default function DevicesPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-base font-semibold text-slate-100">Устройства</div>
-          <div className="mt-1 text-xs text-slate-400">Список устройств мониторинга и удалённых измерений</div>
+          <div className="mt-1 text-xs text-slate-400">
+            Список устройств мониторинга и удалённых измерений
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
             className="h-9 rounded-xl bg-slate-900/40 text-slate-100 hover:bg-slate-900"
-            onClick={load}
+            onClick={() => void load()}
             disabled={loading}
           >
             <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
             Обновить
           </Button>
 
-          <Button className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-500" onClick={() => setCreateOpen(true)}>
+          <Button
+            className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-500"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Добавить устройство
           </Button>
@@ -99,7 +112,10 @@ export default function DevicesPage() {
       <Card className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
         <div className="flex items-center justify-between">
           <div className="text-sm font-medium text-slate-200">Список</div>
-          <Badge variant="outline" className="rounded-full border-slate-700 bg-slate-900/30 text-slate-300">
+          <Badge
+            variant="outline"
+            className="rounded-full border-slate-700 bg-slate-900/30 text-slate-300"
+          >
             {items.length} шт.
           </Badge>
         </div>
@@ -107,7 +123,9 @@ export default function DevicesPage() {
         <Separator className="my-4 bg-slate-800" />
 
         {err ? (
-          <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-100">{err}</div>
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-100">
+            {err}
+          </div>
         ) : null}
 
         <div className="overflow-x-auto">
@@ -121,6 +139,7 @@ export default function DevicesPage() {
                 <th className="py-3 text-right font-medium">Действия</th>
               </tr>
             </thead>
+
             <tbody>
               {loading ? (
                 <tr>
@@ -136,13 +155,17 @@ export default function DevicesPage() {
                 </tr>
               ) : (
                 items.map((d) => (
-                  <tr key={d.id} className="border-b border-slate-900/70 hover:bg-slate-900/20">
+                  <tr
+                    key={d.id}
+                    className="border-b border-slate-900/70 hover:bg-slate-900/20"
+                  >
                     <td className="py-3">
                       <div className="font-medium text-slate-100">{d.name ?? d.uid}</div>
                       <div className="mt-0.5 text-xs text-slate-400">
                         UID: <span className="text-slate-300">{d.uid}</span>
                         {d.kind ? <span className="ml-2 text-slate-500">· {d.kind}</span> : null}
                         {d.isp ? <span className="ml-2 text-slate-500">· {d.isp}</span> : null}
+                        {!d.isActive ? <span className="ml-2 text-rose-300">· disabled</span> : null}
                       </div>
                     </td>
 
@@ -172,6 +195,15 @@ export default function DevicesPage() {
 
                     <td className="py-3">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          className="h-9 rounded-xl bg-slate-900/40 text-slate-100 hover:bg-slate-900"
+                          onClick={() => router.push(`/devices/${d.id}/remote-speed`)}
+                        >
+                          <Activity className="mr-2 h-4 w-4" />
+                          RemoteSpeed
+                        </Button>
+
                         <Button
                           variant="secondary"
                           className="h-9 rounded-xl bg-slate-900/40 text-slate-100 hover:bg-slate-900"
@@ -207,7 +239,6 @@ export default function DevicesPage() {
         </div>
       </Card>
 
-      {/* dialogs */}
       <DeviceFormDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -227,7 +258,10 @@ export default function DevicesPage() {
         initial={edit}
         onSubmit={async (data) => {
           if (!edit) return;
-          await apiFetch(`/devices/${edit.id}`, { method: "PATCH", body: JSON.stringify(data) });
+          await apiFetch(`/devices/${edit.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(data),
+          });
           setEdit(null);
           await load();
         }}

@@ -17,11 +17,17 @@ async function bootstrap() {
 
   app.enableCors({
     origin: (origin, cb) => {
-      // запросы без Origin (curl/postman) — разрешаем
       if (!origin) return cb(null, true);
-      return allowed.includes(origin) ? cb(null, true) : cb(new Error("CORS blocked"), false);
+
+      if (allowed.includes(origin)) {
+        return cb(null, true);
+      }
+
+      return cb(null, false);
     },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   });
 
   app.useGlobalPipes(
