@@ -1,0 +1,7 @@
+{
+  "/(app)/dashboard/page": "app/(app)/dashboard/page.js",
+  "/(app)/devices/page": "app/(app)/devices/page.js",
+  "/(app)/map/page": "app/(app)/map/page.js",
+  "/(app)/measurements/page": "app/(app)/measurements/page.js",
+  "/(app)/speedtest/page": "app/(app)/speedtest/page.js"
+}
