@@ -6,14 +6,16 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Nest сам корректно завершит приложение, а Prisma закроется через onModuleDestroy
   app.enableShutdownHooks();
 
   const config = app.get(ConfigService);
   const port = Number(config.get("PORT") ?? 4000);
 
   const originRaw = (config.get("CORS_ORIGIN") ?? "http://localhost:3000") as string;
-  const allowed = originRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  const allowed = originRaw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   app.enableCors({
     origin: (origin, cb) => {
@@ -35,10 +37,11 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidUnknownValues: true,
-    })
+    }),
   );
 
   await app.listen(port);
   console.log(`API running on http://localhost:${port}`);
 }
+
 bootstrap();
