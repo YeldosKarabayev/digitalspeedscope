@@ -97,7 +97,7 @@ export function DeviceFormDialog({
                 className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-100 outline-none"
                 value={form.isp ?? ""}
                 onChange={(e) => setForm((s) => ({ ...s, isp: e.target.value }))}
-                placeholder="Например: Ростелеком"
+                placeholder="Например: Казактелеком"
               />
             </Field>
           </div>

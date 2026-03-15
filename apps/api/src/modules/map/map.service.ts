@@ -6,7 +6,7 @@ type Metric = "download" | "upload" | "ping";
 
 @Injectable()
 export class MapService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private rangeToSince(range: RangeKey): Date {
     const now = Date.now();
@@ -64,12 +64,22 @@ export class MapService {
     const result = points.map((p) => {
       const m = p.deviceId ? latestByDevice.get(p.deviceId) : null;
 
+      let status: "ok" | "warn" | "bad" = "ok";
+      const health = p.device?.health ?? p.health;
+
+      if (health === "OFFLINE") status = "bad";
+      else if (health === "DEGRADED") status = "warn";
+
       return {
         id: p.id,
         name: p.name,
         city: p.city.name,
         lat: Number(p.lat),
         lng: Number(p.lng),
+
+        status,
+        deviceId: p.device?.id ?? null,
+
         download: m?.downloadMbps ?? 0,
         upload: m?.uploadMbps ?? 0,
         ping: m?.pingMs ?? 0,
