@@ -19,7 +19,7 @@ export class RemoteSpeedService {
     const existing = await this.prisma.remoteSpeedJob.findFirst({
       where: {
         deviceId,
-        status: { in: ["PENDING", "RUNNING"] as any },
+        status: { in: ["QUEUED", "RUNNING"] as any },
       },
     });
 
@@ -30,7 +30,7 @@ export class RemoteSpeedService {
     const job = await this.prisma.remoteSpeedJob.create({
       data: {
         deviceId,
-        status: "PENDING" as any,
+        status: "QUEUED" as any,
       },
     });
 
