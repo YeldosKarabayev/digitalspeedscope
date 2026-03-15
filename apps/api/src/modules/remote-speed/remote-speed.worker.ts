@@ -12,6 +12,10 @@ function calcStatus(pingMs: number | null, packetLoss: number | null) {
   return "EXCELLENT";
 }
 
+function randomInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
 @Injectable()
 export class RemoteSpeedWorker {
   private readonly logger = new Logger(RemoteSpeedWorker.name);
@@ -59,6 +63,8 @@ export class RemoteSpeedWorker {
     if (!job?.device) return;
 
     try {
+      const isDemo = process.env.DEMO_REMOTE_SPEED === "true";
+
       const conn = {
         host: job.device.mikrotikHost!,
         port: job.device.mikrotikPort ?? 8728,
@@ -69,29 +75,70 @@ export class RemoteSpeedWorker {
         timeoutMs: 15000,
       };
 
-      await this.prisma.remoteSpeedJob.update({
-        where: { id: jobId },
-        data: {
-          phase: "PING",
-          progress: 25,
-          message: "Running remote ping",
-        } as any,
-      });
+      let ping: {
+        pingMs: number | null;
+        jitterMs: number | null;
+        packetLoss: number | null;
+      };
 
-      const pingTarget = (job.device as any).pingTarget ?? "8.8.8.8";
-      const ping = await this.pingRunner.run(conn, pingTarget, 5);
+      let downloadMbps: number;
+      let uploadMbps: number;
 
-      await this.prisma.remoteSpeedJob.update({
-        where: { id: jobId },
-        data: {
-          phase: "TRAFFIC",
-          progress: 60,
-          message: "Reading interface traffic",
-        } as any,
-      });
+      if (isDemo) {
+        await this.prisma.remoteSpeedJob.update({
+          where: { id: jobId },
+          data: {
+            phase: "PING",
+            progress: 25,
+            message: "Simulating remote ping",
+          } as any,
+        });
 
-      const interfaceName = (job.device as any).wanInterface ?? "ether1";
-      const traffic = await this.trafficRunner.run(conn, interfaceName);
+        ping = {
+          pingMs: randomInt(8, 35),
+          jitterMs: randomInt(1, 8),
+          packetLoss: randomInt(0, 1),
+        };
+
+        await this.prisma.remoteSpeedJob.update({
+          where: { id: jobId },
+          data: {
+            phase: "TRAFFIC",
+            progress: 60,
+            message: "Simulating throughput measurement",
+          } as any,
+        });
+
+        downloadMbps = randomInt(80, 300);
+        uploadMbps = randomInt(30, 120);
+      } else {
+        await this.prisma.remoteSpeedJob.update({
+          where: { id: jobId },
+          data: {
+            phase: "PING",
+            progress: 25,
+            message: "Running remote ping",
+          } as any,
+        });
+
+        const pingTarget = (job.device as any).pingTarget ?? "8.8.8.8";
+        ping = await this.pingRunner.run(conn, pingTarget, 5);
+
+        await this.prisma.remoteSpeedJob.update({
+          where: { id: jobId },
+          data: {
+            phase: "TRAFFIC",
+            progress: 60,
+            message: "Reading interface traffic",
+          } as any,
+        });
+
+        const interfaceName = (job.device as any).wanInterface ?? "ether1";
+        const traffic = await this.trafficRunner.run(conn, interfaceName);
+
+        downloadMbps = traffic.downloadMbps;
+        uploadMbps = traffic.uploadMbps;
+      }
 
       await this.prisma.remoteSpeedJob.update({
         where: { id: jobId },
@@ -105,8 +152,8 @@ export class RemoteSpeedWorker {
       const measurement = await this.prisma.measurement.create({
         data: {
           deviceId: job.deviceId,
-          downloadMbps: traffic.downloadMbps,
-          uploadMbps: traffic.uploadMbps,
+          downloadMbps,
+          uploadMbps,
           pingMs: ping.pingMs,
           jitterMs: ping.jitterMs,
           packetLoss: ping.packetLoss ?? 0,
