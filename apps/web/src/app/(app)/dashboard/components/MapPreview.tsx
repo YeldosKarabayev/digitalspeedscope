@@ -51,13 +51,20 @@ export function MapPreview() {
   const [points, setPoints] = React.useState<Point[]>([]);
 
   const loadPoints = React.useCallback(async () => {
-    const res = await apiFetch<MapPointsResponse>(
-      `/map/points?range=${range}&metric=download&city=${encodeURIComponent("Все города")}`
-    );
-    setPoints(res.points ?? []);
+    setError(null);
+
+    try {
+      const res = await apiFetch<MapPointsResponse>(
+        `/map/points?range=${range}&metric=download&city=${encodeURIComponent("Все города")}`
+      );
+      setPoints(res.points ?? []);
+    } catch (e: any) {
+      setError(e?.message ?? "Ошибка загрузки точек карты");
+      setPoints([]);
+    }
   }, [range]);
 
-  const initMap = React.useCallback(async () => {
+  const initMap = React.useCallback(async (nextPoints: Point[]) => {
     setError(null);
 
     try {
@@ -72,8 +79,8 @@ export function MapPreview() {
       }
 
       const center =
-        points.length > 0
-          ? [points[0].lat, points[0].lng]
+        nextPoints.length > 0
+          ? [nextPoints[0].lat, nextPoints[0].lng]
           : [43.238949, 76.889709];
 
       const map = new ymaps.Map(
@@ -90,7 +97,7 @@ export function MapPreview() {
 
       map.controls.add("zoomControl", { position: { right: 12, top: 72 } });
 
-      points.forEach((p) => {
+      nextPoints.forEach((p) => {
         const placemark = new ymaps.Placemark(
           [p.lat, p.lng],
           {
@@ -102,7 +109,11 @@ export function MapPreview() {
                 Download: ${p.download} Мбит/с<br/>
                 Upload: ${p.upload} Мбит/с<br/>
                 Ping: ${p.ping} мс<br/>
-                ${p.lastSeen ? `Last seen: ${new Date(p.lastSeen).toLocaleString("ru-RU")}` : ""}
+                ${
+                  p.lastSeen
+                    ? `Last seen: ${new Date(p.lastSeen).toLocaleString("ru-RU")}`
+                    : ""
+                }
               </div>
             `,
             hintContent: `${p.city} · ${p.name}`,
@@ -128,25 +139,16 @@ export function MapPreview() {
       setError(e?.message ?? "Ошибка загрузки карты");
       setReady(false);
     }
-  }, [points]);
+  }, []);
 
   React.useEffect(() => {
-    let mounted = true;
+    void loadPoints();
+  }, [loadPoints]);
 
-    (async () => {
-      try {
-        await loadPoints();
-        if (mounted) {
-          await initMap();
-        }
-      } catch (e: any) {
-        setError(e?.message ?? "Ошибка загрузки карты");
-        setReady(false);
-      }
-    })();
+  React.useEffect(() => {
+    void initMap(points);
 
     return () => {
-      mounted = false;
       if (mapInstanceRef.current) {
         try {
           mapInstanceRef.current.destroy();
@@ -154,7 +156,7 @@ export function MapPreview() {
         mapInstanceRef.current = null;
       }
     };
-  }, [loadPoints, initMap]);
+  }, [points, initMap]);
 
   return (
     <DashboardSection
@@ -174,11 +176,9 @@ export function MapPreview() {
             variant="secondary"
             onClick={() => {
               setRefreshSpin(true);
-              loadPoints()
-                .then(() => initMap())
-                .finally(() =>
-                  window.setTimeout(() => setRefreshSpin(false), 650)
-                );
+              loadPoints().finally(() =>
+                window.setTimeout(() => setRefreshSpin(false), 650)
+              );
             }}
             className="h-9 rounded-xl bg-slate-900/40 text-slate-100 hover:bg-slate-900"
           >
@@ -237,9 +237,7 @@ export function MapPreview() {
           <LegendDot className="bg-emerald-500/90" label="Норма" />
           <LegendDot className="bg-amber-500/90" label="Деградация" />
           <LegendDot className="bg-rose-500/90" label="Плохо" />
-          <span className="ml-auto text-slate-500">
-            Реальные точки из БД
-          </span>
+          <span className="ml-auto text-slate-500">Реальные точки из БД</span>
         </div>
       </div>
     </DashboardSection>
