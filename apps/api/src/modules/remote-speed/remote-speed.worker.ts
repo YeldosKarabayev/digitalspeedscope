@@ -5,7 +5,7 @@ import { RemotePingRunner } from "./remote-ping.runner";
 import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 
 function calcStatus(pingMs: number | null, packetLoss: number | null) {
-  if (pingMs == null || pingMs <= 0) return "UNKNOWN";
+  if (pingMs == null || pingMs <= 0) return "POOR";
   if ((packetLoss ?? 0) >= 5 || pingMs >= 150) return "POOR";
   if ((packetLoss ?? 0) >= 2 || pingMs >= 80) return "FAIR";
   if (pingMs >= 35) return "GOOD";
@@ -24,7 +24,7 @@ export class RemoteSpeedWorker {
     private readonly prisma: PrismaService,
     private readonly pingRunner: RemotePingRunner,
     private readonly mikrotikSpeedRunner: MikrotikSpeedRunner,
-  ) {}
+  ) { }
 
   @Interval(5000)
   async tick() {

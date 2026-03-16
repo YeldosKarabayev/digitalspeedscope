@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { MikrotikApiService } from "../mikrotik/mikrotik-api.service";
 
 export type RemoteSpeedRunParams = {
@@ -94,18 +94,38 @@ export class MikrotikSpeedRunner {
       70_000,
     );
 
-    let rxKbps = 0;
-    let txKbps = 0;
-    let localCpuLoad: number | null = null;
-    let remoteCpuLoad: number | null = null;
-    let connectionCount: number | null = null;
-
     const rows: any[] = [];
     for (const r of Array.isArray(raw) ? raw : [raw]) {
       if (r?.data && Array.isArray(r.data)) rows.push(...r.data);
       else if (r?.data) rows.push(r.data);
       else rows.push(r);
     }
+
+    if (!rows.length) {
+      throw new BadRequestException("Bandwidth-test returned empty result");
+    }
+
+    const statuses = rows
+      .map((row) => String(row?.status ?? "").toLowerCase().trim())
+      .filter(Boolean);
+
+    if (statuses.some((s) => s.includes("authentication failed"))) {
+      throw new BadRequestException("Bandwidth-test authentication failed");
+    }
+
+    if (statuses.some((s) => s.includes("could not connect"))) {
+      throw new BadRequestException("Bandwidth-test could not connect to target");
+    }
+
+    if (statuses.some((s) => s.includes("timeout"))) {
+      throw new BadRequestException("Bandwidth-test timed out");
+    }
+
+    let rxKbps = 0;
+    let txKbps = 0;
+    let localCpuLoad: number | null = null;
+    let remoteCpuLoad: number | null = null;
+    let connectionCount: number | null = null;
 
     for (const row of rows) {
       const rx =
@@ -124,6 +144,12 @@ export class MikrotikSpeedRunner {
       localCpuLoad ??= parsePercent(row["local-cpu-load"]);
       remoteCpuLoad ??= parsePercent(row["remote-cpu-load"]);
       connectionCount ??= parseIntSafe(row["connection-count"]);
+    }
+
+    const hasAnyTraffic = rxKbps > 0 || txKbps > 0;
+
+    if (!hasAnyTraffic) {
+      throw new BadRequestException("Bandwidth-test finished with zero traffic");
     }
 
     return {
