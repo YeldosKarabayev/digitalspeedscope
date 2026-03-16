@@ -5,7 +5,7 @@ import { RemotePingRunner } from "./remote-ping.runner";
 import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 
 function calcStatus(pingMs: number | null, packetLoss: number | null) {
-  if (pingMs == null) return "UNKNOWN";
+  if (pingMs == null || pingMs <= 0) return "UNKNOWN";
   if ((packetLoss ?? 0) >= 5 || pingMs >= 150) return "POOR";
   if ((packetLoss ?? 0) >= 2 || pingMs >= 80) return "FAIR";
   if (pingMs >= 35) return "GOOD";
@@ -122,7 +122,9 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
-        const pingTarget = (job as any).targetHost || (job.device as any).pingTarget || "8.8.8.8";
+        const pingTarget =
+          (job as any).targetHost || (job.device as any).pingTarget || "8.8.8.8";
+
         ping = await this.pingRunner.run(conn, pingTarget, 5);
 
         await this.prisma.remoteSpeedJob.update({
@@ -134,15 +136,26 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
+        const btestUser =
+          (job.device as any).bandwidthTestUser ??
+          process.env.MIKROTIK_BTEST_USER ??
+          "admin";
+
+        const btestPassword =
+          (job.device as any).bandwidthTestPassword ??
+          process.env.MIKROTIK_BTEST_PASSWORD;
+
+        if (!btestPassword) {
+          throw new Error("Bandwidth-test password is not configured");
+        }
+
         const speed = await this.mikrotikSpeedRunner.runBandwidthTest(conn, {
           targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.10.0.2",
           durationSec: job.durationSec ?? 20,
           protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
           direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
-          user: (job.device as any).bandwidthTestUser ?? "admin",
-          password:
-            (job.device as any).bandwidthTestPassword ??
-            process.env.MIKROTIK_BTEST_PASSWORD,
+          user: btestUser,
+          password: btestPassword,
         });
 
         downloadMbps = speed.downloadMbps;
