@@ -252,10 +252,16 @@ model RemoteSpeedJob {
   phase    String?
   message  String?
 
+  targetHost  String?
+  protocol    String?
+  direction   String?
+  durationSec Int?
+
+  rawResult    Json?
+  errorMessage String?
+
   measurementId String?      @unique
   measurement   Measurement? @relation(fields: [measurementId], references: [id])
-
-  errorMessage String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

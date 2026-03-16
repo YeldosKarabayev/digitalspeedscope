@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
-  Activity,
   Wifi,
   ArrowRight,
   RefreshCw,
@@ -18,6 +17,9 @@ import {
   CheckCircle2,
   Clock3,
   ArrowLeft,
+  Target,
+  TimerReset,
+  Waypoints,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
@@ -48,6 +50,12 @@ type RemoteSpeedJob = {
   errorMessage?: string | null;
   createdAt: string;
   updatedAt?: string;
+
+  targetHost?: string | null;
+  protocol?: "tcp" | "udp" | null;
+  direction?: "both" | "transmit" | "receive" | null;
+  durationSec?: number | null;
+
   measurement?: RemoteMeasurement | null;
 };
 
@@ -96,6 +104,8 @@ function jobPhaseLabel(phase?: string | null) {
       return "Ping";
     case "TRAFFIC":
       return "Трафик";
+    case "BANDWIDTH_TEST":
+      return "Bandwidth test";
     case "SAVING":
       return "Сохранение";
     case "DONE":
@@ -114,6 +124,7 @@ function clamp(n: number, a: number, b: number) {
 export default function RemoteSpeedPage() {
   const router = useRouter();
   const params = useParams();
+
   const deviceId =
     typeof params?.id === "string"
       ? params.id
@@ -125,6 +136,11 @@ export default function RemoteSpeedPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [job, setJob] = React.useState<RemoteSpeedJob | null>(null);
   const [result, setResult] = React.useState<RemoteMeasurement | null>(null);
+
+  const [target, setTarget] = React.useState("10.10.0.2");
+  const [protocol, setProtocol] = React.useState<"tcp" | "udp">("tcp");
+  const [direction, setDirection] = React.useState<"both" | "transmit" | "receive">("both");
+  const [durationSec, setDurationSec] = React.useState(20);
 
   const pollTimerRef = React.useRef<number | null>(null);
 
@@ -177,6 +193,11 @@ export default function RemoteSpeedPage() {
       return;
     }
 
+    if (!target.trim()) {
+      setError("Укажи target host");
+      return;
+    }
+
     setError(null);
     setResult(null);
     setJob(null);
@@ -188,7 +209,12 @@ export default function RemoteSpeedPage() {
         `/devices/${deviceId}/remote-speed`,
         {
           method: "POST",
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            target: target.trim(),
+            protocol,
+            direction,
+            durationSec,
+          }),
         }
       );
 
@@ -264,7 +290,65 @@ export default function RemoteSpeedPage() {
 
           <Separator className="my-4 bg-slate-800" />
 
-          <div className="relative mx-auto grid h-[220px] w-[220px] place-items-center">
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Target host" icon={<Target className="h-4 w-4 text-slate-400" />}>
+                <input
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  disabled={running}
+                  placeholder="10.10.0.2"
+                  className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-indigo-500/40"
+                />
+              </Field>
+
+              <Field label="Duration" icon={<TimerReset className="h-4 w-4 text-slate-400" />}>
+                <input
+                  type="number"
+                  min={3}
+                  max={60}
+                  value={durationSec}
+                  disabled={running}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setDurationSec(Number.isFinite(next) ? clamp(next, 3, 60) : 20);
+                  }}
+                  className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-indigo-500/40"
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Protocol" icon={<Wifi className="h-4 w-4 text-slate-400" />}>
+                <select
+                  value={protocol}
+                  disabled={running}
+                  onChange={(e) => setProtocol(e.target.value as "tcp" | "udp")}
+                  className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition focus:border-indigo-500/40"
+                >
+                  <option value="tcp">tcp</option>
+                  <option value="udp">udp</option>
+                </select>
+              </Field>
+
+              <Field label="Direction" icon={<Waypoints className="h-4 w-4 text-slate-400" />}>
+                <select
+                  value={direction}
+                  disabled={running}
+                  onChange={(e) =>
+                    setDirection(e.target.value as "both" | "transmit" | "receive")
+                  }
+                  className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition focus:border-indigo-500/40"
+                >
+                  <option value="both">both</option>
+                  <option value="transmit">transmit</option>
+                  <option value="receive">receive</option>
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          <div className="relative mx-auto mt-5 grid h-[220px] w-[220px] place-items-center">
             <div className="absolute inset-0 rounded-full bg-indigo-500/10 blur-2xl" />
             <div className="relative grid h-[220px] w-[220px] place-items-center rounded-full border border-slate-800 bg-slate-950/60">
               <RingProgress value={gaugeValue} />
@@ -332,7 +416,7 @@ export default function RemoteSpeedPage() {
               </div>
             ) : (
               <div className="text-xs text-slate-500">
-                Проверка выполняется на MikroTik: ping + snapshot traffic.
+                Проверка выполняется на MikroTik: ping + bandwidth-test.
               </div>
             )}
           </div>
@@ -363,7 +447,7 @@ export default function RemoteSpeedPage() {
               </div>
 
               {job ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <InfoTile
                     icon={<Clock3 className="h-4 w-4 text-slate-400" />}
                     title="Состояние job"
@@ -378,6 +462,25 @@ export default function RemoteSpeedPage() {
                   >
                     <div className="text-sm text-slate-100">{jobPhaseLabel(job.phase)}</div>
                     <div className="mt-1 text-xs text-slate-400">{progress}%</div>
+                  </InfoTile>
+
+                  <InfoTile
+                    icon={<Wifi className="h-4 w-4 text-slate-400" />}
+                    title="Параметры теста"
+                  >
+                    <div className="text-sm text-slate-100">
+                      {job.protocol ?? protocol} / {job.direction ?? direction}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      {job.durationSec ?? durationSec} сек
+                    </div>
+                  </InfoTile>
+
+                  <InfoTile
+                    icon={<RouterIcon className="h-4 w-4 text-slate-400" />}
+                    title="Цель"
+                  >
+                    <div className="text-sm text-slate-100">{job.targetHost ?? target}</div>
                   </InfoTile>
                 </div>
               ) : null}
@@ -407,6 +510,16 @@ export default function RemoteSpeedPage() {
                 <MiniStat label="Статус" value={statusLabel(result.status)} />
               </div>
 
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MiniStat label="Target" value={job?.targetHost ?? target} />
+                <MiniStat label="Protocol" value={job?.protocol ?? protocol} />
+                <MiniStat label="Direction" value={job?.direction ?? direction} />
+                <MiniStat
+                  label="Duration"
+                  value={`${job?.durationSec ?? durationSec} сек`}
+                />
+              </div>
+
               <div className="rounded-xl border border-slate-800 bg-slate-900/20 px-4 py-3">
                 <div className="flex items-start gap-2 text-xs text-slate-400">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
@@ -432,6 +545,26 @@ export default function RemoteSpeedPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function Field({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="grid gap-2">
+      <div className="flex items-center gap-2 text-xs text-slate-400">
+        {icon}
+        <span>{label}</span>
+      </div>
+      {children}
+    </label>
   );
 }
 

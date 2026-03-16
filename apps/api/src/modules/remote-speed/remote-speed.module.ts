@@ -6,6 +6,7 @@ import { RemoteSpeedController } from "./remote-speed.controller";
 import { RemoteSpeedWorker } from "./remote-speed.worker";
 import { RemotePingRunner } from "./remote-ping.runner";
 import { RemoteTrafficRunner } from "./remote-traffic.runner";
+import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 
 @Module({
   imports: [PrismaModule, MikrotikModule],
@@ -15,7 +16,9 @@ import { RemoteTrafficRunner } from "./remote-traffic.runner";
     RemoteSpeedWorker,
     RemotePingRunner,
     RemoteTrafficRunner,
+    MikrotikSpeedRunner,
   ],
   exports: [RemoteSpeedService],
 })
 export class RemoteSpeedModule {}
+

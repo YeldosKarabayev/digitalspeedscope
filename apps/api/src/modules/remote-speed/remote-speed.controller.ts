@@ -5,6 +5,9 @@ type CreateRemoteSpeedJobDto = {
   target?: string;
   interfaceName?: string;
   count?: number;
+  durationSec?: number;
+  protocol?: "tcp" | "udp";
+  direction?: "both" | "transmit" | "receive";
 };
 
 @Controller("devices")
@@ -12,10 +15,7 @@ export class RemoteSpeedController {
   constructor(private readonly remoteSpeed: RemoteSpeedService) {}
 
   @Post(":id/remote-speed")
-  run(
-    @Param("id") id: string,
-    @Body() body: CreateRemoteSpeedJobDto,
-  ) {
+  run(@Param("id") id: string, @Body() body: CreateRemoteSpeedJobDto) {
     return this.remoteSpeed.createJob(id, body);
   }
 

@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Interval } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.module";
 import { RemotePingRunner } from "./remote-ping.runner";
-import { RemoteTrafficRunner } from "./remote-traffic.runner";
+import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 
 function calcStatus(pingMs: number | null, packetLoss: number | null) {
   if (pingMs == null) return "UNKNOWN";
@@ -23,7 +23,7 @@ export class RemoteSpeedWorker {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pingRunner: RemotePingRunner,
-    private readonly trafficRunner: RemoteTrafficRunner,
+    private readonly mikrotikSpeedRunner: MikrotikSpeedRunner,
   ) {}
 
   @Interval(5000)
@@ -72,7 +72,6 @@ export class RemoteSpeedWorker {
         password:
           (job.device as any).mikrotikPassword ??
           process.env.MIKROTIK_PASSWORD!,
-        timeoutMs: 15000,
       };
 
       let ping: {
@@ -83,6 +82,7 @@ export class RemoteSpeedWorker {
 
       let downloadMbps: number;
       let uploadMbps: number;
+      let rawResult: any = null;
 
       if (isDemo) {
         await this.prisma.remoteSpeedJob.update({
@@ -103,14 +103,15 @@ export class RemoteSpeedWorker {
         await this.prisma.remoteSpeedJob.update({
           where: { id: jobId },
           data: {
-            phase: "TRAFFIC",
+            phase: "BANDWIDTH_TEST",
             progress: 60,
-            message: "Simulating throughput measurement",
+            message: "Simulating MikroTik bandwidth-test",
           } as any,
         });
 
         downloadMbps = randomInt(80, 300);
         uploadMbps = randomInt(30, 120);
+        rawResult = { demo: true };
       } else {
         await this.prisma.remoteSpeedJob.update({
           where: { id: jobId },
@@ -121,23 +122,32 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
-        const pingTarget = (job.device as any).pingTarget ?? "8.8.8.8";
+        const pingTarget = (job as any).targetHost || (job.device as any).pingTarget || "8.8.8.8";
         ping = await this.pingRunner.run(conn, pingTarget, 5);
 
         await this.prisma.remoteSpeedJob.update({
           where: { id: jobId },
           data: {
-            phase: "TRAFFIC",
+            phase: "BANDWIDTH_TEST",
             progress: 60,
-            message: "Reading interface traffic",
+            message: "Running MikroTik bandwidth-test",
           } as any,
         });
 
-        const interfaceName = (job.device as any).wanInterface ?? "ether1";
-        const traffic = await this.trafficRunner.run(conn, interfaceName);
+        const speed = await this.mikrotikSpeedRunner.runBandwidthTest(conn, {
+          targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.10.0.2",
+          durationSec: job.durationSec ?? 20,
+          protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
+          direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
+          user: (job.device as any).bandwidthTestUser ?? "admin",
+          password:
+            (job.device as any).bandwidthTestPassword ??
+            process.env.MIKROTIK_BTEST_PASSWORD,
+        });
 
-        downloadMbps = traffic.downloadMbps;
-        uploadMbps = traffic.uploadMbps;
+        downloadMbps = speed.downloadMbps;
+        uploadMbps = speed.uploadMbps;
+        rawResult = speed.raw;
       }
 
       await this.prisma.remoteSpeedJob.update({
@@ -146,6 +156,7 @@ export class RemoteSpeedWorker {
           phase: "SAVING",
           progress: 85,
           message: "Saving measurement",
+          rawResult,
         } as any,
       });
 
