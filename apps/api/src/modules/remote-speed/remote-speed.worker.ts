@@ -137,26 +137,24 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
-        const btestUser =
-          (job.device as any).bandwidthTestUser ??
-          process.env.MIKROTIK_BTEST_USER ??
-          "admin";
-
-        const btestPassword =
-          (job.device as any).bandwidthTestPassword ??
-          process.env.MIKROTIK_BTEST_PASSWORD;
-
-        if (!btestPassword) {
-          throw new Error("Bandwidth-test password is not configured");
-        }
+        const useBtestAuth = process.env.MIKROTIK_BTEST_AUTH === "true";
 
         const speed = await this.mikrotikSpeedRunner.runBandwidthTest(conn, {
           targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.20.20.2",
           durationSec: job.durationSec ?? 20,
           protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
           direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
-          user: btestUser,
-          password: btestPassword,
+          ...(useBtestAuth
+            ? {
+              user:
+                (job.device as any).bandwidthTestUser ??
+                process.env.MIKROTIK_BTEST_USER ??
+                "admin",
+              password:
+                (job.device as any).bandwidthTestPassword ??
+                process.env.MIKROTIK_BTEST_PASSWORD,
+            }
+            : {}),
         });
 
         downloadMbps = speed.downloadMbps;
