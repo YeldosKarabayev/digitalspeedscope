@@ -137,7 +137,7 @@ export default function RemoteSpeedPage() {
   const [job, setJob] = React.useState<RemoteSpeedJob | null>(null);
   const [result, setResult] = React.useState<RemoteMeasurement | null>(null);
 
-  const [target, setTarget] = React.useState("10.10.20.2");
+  const [target, setTarget] = React.useState("10.20.20.2");
   const [protocol, setProtocol] = React.useState<"tcp" | "udp">("tcp");
   const [direction, setDirection] = React.useState<"both" | "transmit" | "receive">("both");
   const [durationSec, setDurationSec] = React.useState(20);
@@ -298,7 +298,7 @@ export default function RemoteSpeedPage() {
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   disabled={running}
-                  placeholder="10.10.0.2"
+                  placeholder="10.20.0.2"
                   className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-indigo-500/40"
                 />
               </Field>
