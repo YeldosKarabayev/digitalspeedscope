@@ -15,11 +15,18 @@ export class RemotePingRunner {
   constructor(private readonly mikrotik: MikrotikApiService) {}
 
   async run(conn: Conn, target = "8.8.8.8", count = 5) {
-    const raw = await this.mikrotik.exec(conn, [
-      "/ping",
-      `=address=${target}`,
-      `=count=${count}`,
-    ]);
+    const safeCount = Math.min(count, 3);
+
+    const raw = await this.mikrotik.exec(
+      conn,
+      [
+        "/ping",
+        `=address=${target}`,
+        `=count=${safeCount}`,
+        "=interval=200ms",
+      ],
+      15_000,
+    );
 
     const rows = Array.isArray(raw) ? raw : [raw];
 

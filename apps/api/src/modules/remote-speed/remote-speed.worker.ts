@@ -124,7 +124,7 @@ export class RemoteSpeedWorker {
         });
 
         const pingTarget =
-          (job as any).targetHost || (job.device as any).pingTarget || "8.8.8.8";
+          (job.device as any).pingTarget || "8.8.8.8";
 
         ping = await this.pingRunner.run(conn, pingTarget, 5);
 
