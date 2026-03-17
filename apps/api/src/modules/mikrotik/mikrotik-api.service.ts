@@ -32,9 +32,12 @@ function sentenceToQuery(sentence: string[]) {
 
 @Injectable()
 export class MikrotikApiService {
-    async exec(params: MikrotikConnParams, sentence: string[], timeoutMs: number = 30_000) {
-        const timeout = params.timeoutMs ?? 30_000;
-
+    async exec(
+        params: MikrotikConnParams,
+        sentence: string[],
+        timeoutMs: number = 30_000,
+    ) {
+        const timeout = params.timeoutMs ?? timeoutMs ?? 30_000;
         const client = new RouterOSClient(params.host, params.port ?? 8728, timeout);
 
         try {

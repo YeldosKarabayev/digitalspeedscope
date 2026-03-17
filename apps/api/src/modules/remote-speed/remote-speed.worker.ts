@@ -72,6 +72,7 @@ export class RemoteSpeedWorker {
         password:
           (job.device as any).mikrotikPassword ??
           process.env.MIKROTIK_PASSWORD!,
+        timeoutMs: 15000,
       };
 
       let ping: {
@@ -150,7 +151,7 @@ export class RemoteSpeedWorker {
         }
 
         const speed = await this.mikrotikSpeedRunner.runBandwidthTest(conn, {
-          targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.10.20.2",
+          targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.20.20.2",
           durationSec: job.durationSec ?? 20,
           protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
           direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
