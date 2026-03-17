@@ -160,7 +160,7 @@ export default function RemoteSpeedPage() {
 
     const res = await apiFetch<RemoteSpeedListResponse>(
       `/devices/${deviceId}/remote-speed/jobs`,
-      { method: "GET" }
+      { method: "GET", timeoutMs: 15000, }
     );
 
     const latest = res.items?.[0] ?? null;
@@ -215,6 +215,7 @@ export default function RemoteSpeedPage() {
             direction,
             durationSec,
           }),
+          timeoutMs: 30000,
         }
       );
 

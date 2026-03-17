@@ -3,14 +3,15 @@ import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "./auth-
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-type FetchOpts = RequestInit & { retry?: boolean };
+type FetchOpts = RequestInit & {
+  retry?: boolean;
+  timeoutMs?: number;
+};
 
 export type ApiErrorShape = {
   message: string;
   status?: number;
 };
-
-
 
 function toQuery(params: Record<string, string | number | boolean | undefined | null>) {
   const sp = new URLSearchParams();
@@ -52,8 +53,6 @@ export type MeasurementsListResponse = {
   }>;
 };
 
-
-
 async function refreshTokens() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return null;
@@ -73,31 +72,71 @@ async function refreshTokens() {
 }
 
 export async function apiFetch<T>(path: string, opts: FetchOpts = {}): Promise<T> {
-  const { retry, ...init } = opts; 
+  const { retry, timeoutMs = 30000, ...init } = opts;
   const access = getAccessToken();
   const headers = new Headers(init.headers);
 
-  if (!headers.has("Content-Type") && init.body) headers.set("Content-Type", "application/json");
-  if (access) headers.set("Authorization", `Bearer ${access}`);
-
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
-
-  if (res.status === 401 && retry !== false) {
-    const nextAccess = await refreshTokens();
-    if (!nextAccess) {
-      clearTokens();
-      throw new Error("UNAUTHORIZED");
-    }
-
-    const retryHeaders = new Headers(init.headers);
-    if (!retryHeaders.has("Content-Type") && init.body) retryHeaders.set("Content-Type", "application/json");
-    retryHeaders.set("Authorization", `Bearer ${nextAccess}`);
-
-    const res2 = await fetch(`${API_URL}${path}`, { ...init, headers: retryHeaders });
-    if (!res2.ok) throw new Error(await res2.text().catch(() => `HTTP ${res2.status}`));
-    return (await res2.json()) as T;
+  if (!headers.has("Content-Type") && init.body) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (access) {
+    headers.set("Authorization", `Bearer ${access}`);
   }
 
-  if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
-  return (await res.json()) as T;
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+    });
+
+    if (res.status === 401 && retry !== false) {
+      const nextAccess = await refreshTokens();
+      if (!nextAccess) {
+        clearTokens();
+        throw new Error("UNAUTHORIZED");
+      }
+
+      const retryHeaders = new Headers(init.headers);
+      if (!retryHeaders.has("Content-Type") && init.body) {
+        retryHeaders.set("Content-Type", "application/json");
+      }
+      retryHeaders.set("Authorization", `Bearer ${nextAccess}`);
+
+      const retryController = new AbortController();
+      const retryTimeoutId = window.setTimeout(() => retryController.abort(), timeoutMs);
+
+      try {
+        const res2 = await fetch(`${API_URL}${path}`, {
+          ...init,
+          headers: retryHeaders,
+          signal: retryController.signal,
+        });
+
+        if (!res2.ok) {
+          throw new Error(await res2.text().catch(() => `HTTP ${res2.status}`));
+        }
+
+        return (await res2.json()) as T;
+      } finally {
+        window.clearTimeout(retryTimeoutId);
+      }
+    }
+
+    if (!res.ok) {
+      throw new Error(await res.text().catch(() => `HTTP ${res.status}`));
+    }
+
+    return (await res.json()) as T;
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 }
