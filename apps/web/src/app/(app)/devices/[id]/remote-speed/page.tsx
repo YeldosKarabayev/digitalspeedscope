@@ -137,7 +137,7 @@ export default function RemoteSpeedPage() {
   const [job, setJob] = React.useState<RemoteSpeedJob | null>(null);
   const [result, setResult] = React.useState<RemoteMeasurement | null>(null);
 
-  const [target, setTarget] = React.useState("10.10.0.2");
+  const [target, setTarget] = React.useState("10.10.20.2");
   const [protocol, setProtocol] = React.useState<"tcp" | "udp">("tcp");
   const [direction, setDirection] = React.useState<"both" | "transmit" | "receive">("both");
   const [durationSec, setDurationSec] = React.useState(20);
