@@ -65,14 +65,24 @@ export class RemoteSpeedWorker {
     try {
       const isDemo = process.env.DEMO_REMOTE_SPEED === "true";
 
-      const conn = {
+      const apiConn = {
         host: job.device.mikrotikHost!,
         port: job.device.mikrotikPort ?? 8728,
         username: (job.device as any).mikrotikUsername ?? "admin",
         password:
           (job.device as any).mikrotikPassword ??
           process.env.MIKROTIK_PASSWORD!,
-        timeoutMs: 15000,
+        timeoutMs: 15_000,
+      };
+
+      const sshConn = {
+        host: job.device.mikrotikHost!,
+        port: 22,
+        username: (job.device as any).mikrotikUsername ?? "admin",
+        password:
+          (job.device as any).mikrotikPassword ??
+          process.env.MIKROTIK_PASSWORD!,
+        timeoutMs: 70_000,
       };
 
       let ping: {
@@ -126,7 +136,7 @@ export class RemoteSpeedWorker {
         const pingTarget =
           (job.device as any).pingTarget || "8.8.8.8";
 
-        ping = await this.pingRunner.run(conn, pingTarget, 5);
+        ping = await this.pingRunner.run(apiConn, pingTarget, 5);
 
         await this.prisma.remoteSpeedJob.update({
           where: { id: jobId },
@@ -137,24 +147,13 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
-        const useBtestAuth = process.env.MIKROTIK_BTEST_AUTH === "true";
+        // const useBtestAuth = process.env.MIKROTIK_BTEST_AUTH === "true";
 
-        const speed = await this.mikrotikSpeedRunner.runBandwidthTest(conn, {
+        const speed = await this.mikrotikSpeedRunner.runBandwidthTest(sshConn, {
           targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.20.20.2",
           durationSec: job.durationSec ?? 20,
           protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
           direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
-          ...(useBtestAuth
-            ? {
-              user:
-                (job.device as any).bandwidthTestUser ??
-                process.env.MIKROTIK_BTEST_USER ??
-                "admin",
-              password:
-                (job.device as any).bandwidthTestPassword ??
-                process.env.MIKROTIK_BTEST_PASSWORD,
-            }
-            : {}),
         });
 
         downloadMbps = speed.downloadMbps;
