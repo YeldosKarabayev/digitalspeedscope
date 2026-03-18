@@ -92,15 +92,15 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
     const cleanup = () => {
       try {
         client.end();
-      } catch {}
+      } catch { }
       try {
         client.destroy();
-      } catch {}
+      } catch { }
     };
 
     client
       .on("ready", () => {
-        client.exec(command, (err, stream) => {
+        client.exec(command, { pty: true }, (err, stream) => {
           if (err) {
             cleanup();
             reject(err);
@@ -157,15 +157,24 @@ export class MikrotikSpeedRunner {
       throw new InternalServerErrorException("RouterOS SSH authentication failed");
     }
 
-    const txAvg = parseRateToMbps(pick(normalized, "tx-total-average"));
-    const rxAvg = parseRateToMbps(pick(normalized, "rx-total-average"));
+    const txAvg =
+      parseRateToMbps(pick(normalized, "tx-total-average")) ||
+      parseRateToMbps(pick(normalized, "tx-10-second-average")) ||
+      parseRateToMbps(pick(normalized, "tx-current"));
+
+    const rxAvg =
+      parseRateToMbps(pick(normalized, "rx-total-average")) ||
+      parseRateToMbps(pick(normalized, "rx-10-second-average")) ||
+      parseRateToMbps(pick(normalized, "rx-current"));
     const localCpuLoad = parsePercent(pick(normalized, "local-cpu-load"));
     const remoteCpuLoad = parsePercent(pick(normalized, "remote-cpu-load"));
     const connectionCount = parseIntSafe(pick(normalized, "connection-count"));
 
     const hasAnyTraffic = txAvg > 0 || rxAvg > 0;
     if (!hasAnyTraffic) {
-      throw new InternalServerErrorException("Bandwidth-test finished with zero traffic");
+      throw new InternalServerErrorException(
+        `Bandwidth-test finished with zero traffic. Raw output:\n${normalized}`,
+      );
     }
 
     return {

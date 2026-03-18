@@ -155,6 +155,7 @@ export class RemoteSpeedWorker {
           protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
           direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
         });
+        this.logger.log(`BTEST RAW:\n${speed.raw}`);
 
         downloadMbps = speed.downloadMbps;
         uploadMbps = speed.uploadMbps;
