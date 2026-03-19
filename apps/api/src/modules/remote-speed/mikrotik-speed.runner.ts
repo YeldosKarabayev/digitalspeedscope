@@ -1,6 +1,16 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 import { Client } from "ssh2";
 
+export class BandwidthTestError extends Error {
+  constructor(
+    message: string,
+    public readonly raw?: string,
+  ) {
+    super(message);
+    this.name = "BandwidthTestError";
+  }
+}
+
 export type RemoteSpeedRunParams = {
   targetHost: string;
   durationSec?: number;
@@ -71,7 +81,7 @@ function pick(raw: string, key: string): string | undefined {
 }
 
 function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
-  const duration = `${Math.max(3, Math.min(p.durationSec ?? 10, 60))}s`;
+  const duration = `${Math.max(3, Math.min(p.durationSec ?? 5, 60))}s`;
   const protocol = (p.protocol ?? "tcp").toLowerCase();
   const direction = (p.direction ?? "both").toLowerCase();
 
@@ -103,7 +113,7 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
     const client = new Client();
     const chunks: Buffer[] = [];
     const errs: Buffer[] = [];
-    const readyTimeout = conn.timeoutMs ?? 70_000;
+    const readyTimeout = conn.timeoutMs ?? 30_000;
 
     let settled = false;
     let forceCloseTimer: NodeJS.Timeout | null = null;
@@ -157,15 +167,10 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
 
           stream.on("data", (data: Buffer) => chunks.push(data));
           stream.stderr.on("data", (data: Buffer) => errs.push(data));
-
-          stream.on("error", (streamErr) => {
-            finish(() => reject(streamErr));
-          });
+          stream.on("error", (streamErr) => finish(() => reject(streamErr)));
         });
       })
-      .on("error", (err) => {
-        finish(() => reject(err));
-      })
+      .on("error", (err) => finish(() => reject(err)))
       .connect({
         host: conn.host,
         port: conn.port ?? 22,
@@ -186,20 +191,6 @@ export class MikrotikSpeedRunner {
     const raw = await execSshCommand(conn, command);
     const normalized = normalizeCliOutput(raw);
 
-    console.log("BTEST RAW >>>\n" + normalized);
-
-    if (/authentication failed/i.test(normalized)) {
-      throw new InternalServerErrorException("Bandwidth-test authentication failed");
-    }
-
-    if (/invalid user name or password/i.test(normalized)) {
-      throw new InternalServerErrorException("RouterOS SSH authentication failed");
-    }
-
-    if (/could not connect/i.test(normalized)) {
-      throw new InternalServerErrorException("Bandwidth-test could not connect to target");
-    }
-
     const txAvg =
       parseRateToMbps(pick(normalized, "tx-total-average")) ||
       parseRateToMbps(pick(normalized, "tx-10-second-average")) ||
@@ -214,9 +205,21 @@ export class MikrotikSpeedRunner {
     const remoteCpuLoad = parsePercent(pick(normalized, "remote-cpu-load"));
     const connectionCount = parseIntSafe(pick(normalized, "connection-count"));
 
+    if (/authentication failed/i.test(normalized)) {
+      throw new BandwidthTestError("Bandwidth-test authentication failed", normalized);
+    }
+
+    if (/invalid user name or password/i.test(normalized)) {
+      throw new BandwidthTestError("RouterOS SSH authentication failed", normalized);
+    }
+
+    if (/could not connect/i.test(normalized)) {
+      throw new BandwidthTestError("Bandwidth-test could not connect to target", normalized);
+    }
+
     const hasAnyTraffic = txAvg > 0 || rxAvg > 0;
     if (!hasAnyTraffic) {
-      throw new InternalServerErrorException("Bandwidth-test finished with zero traffic");
+      throw new BandwidthTestError("Bandwidth-test finished with zero traffic", normalized);
     }
 
     return {

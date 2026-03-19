@@ -2,7 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Interval } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.module";
 import { RemotePingRunner } from "./remote-ping.runner";
-import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
+import { BandwidthTestError, MikrotikSpeedRunner } from "./mikrotik-speed.runner";
+
 
 function calcStatus(pingMs: number | null, packetLoss: number | null) {
   if (pingMs == null || pingMs <= 0) return "POOR";
@@ -208,6 +209,7 @@ export class RemoteSpeedWorker {
           phase: "FAILED",
           message: "Remote speed job failed",
           errorMessage: e?.message ?? "Unknown error",
+          rawResult: e instanceof BandwidthTestError ? { raw: e.raw ?? null } : undefined,
         } as any,
       });
     }
