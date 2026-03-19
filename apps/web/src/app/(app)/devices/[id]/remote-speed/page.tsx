@@ -158,34 +158,51 @@ export default function RemoteSpeedPage() {
   const fetchJobs = React.useCallback(async () => {
     if (!deviceId) return;
 
-    const res = await apiFetch<RemoteSpeedListResponse>(
-      `/devices/${deviceId}/remote-speed/jobs`,
-      { method: "GET", timeoutMs: 15000, }
-    );
+    try {
+      const res = await apiFetch<RemoteSpeedListResponse>(
+        `/devices/${deviceId}/remote-speed/jobs`,
+        { method: "GET", timeoutMs: 30000 }
+      );
 
-    const latest = res.items?.[0] ?? null;
-    setJob(latest);
+      const latest = res.items?.[0] ?? null;
+      setJob(latest);
 
-    if (latest?.status === "SUCCEEDED" && latest.measurement) {
-      setResult(latest.measurement);
+      if (latest?.status === "SUCCEEDED" && latest.measurement) {
+        setResult(latest.measurement);
+        setRunning(false);
+        stopPolling();
+        return;
+      }
+
+      if (latest?.status === "FAILED") {
+        setRunning(false);
+        setError(latest.errorMessage ?? "Remote test failed");
+        stopPolling();
+        return;
+      }
+
+      if (latest && (latest.status === "QUEUED" || latest.status === "RUNNING")) {
+        pollTimerRef.current = window.setTimeout(() => {
+          void fetchJobs();
+        }, 3000);
+        return;
+      }
+
       setRunning(false);
       stopPolling();
-    } else if (latest?.status === "FAILED") {
+    } catch (e: any) {
+      if (running) {
+        pollTimerRef.current = window.setTimeout(() => {
+          void fetchJobs();
+        }, 4000);
+        return;
+      }
+
       setRunning(false);
-      setError(latest.errorMessage ?? "Remote test failed");
-      stopPolling();
-    } else if (
-      latest &&
-      (latest.status === "QUEUED" || latest.status === "RUNNING")
-    ) {
-      pollTimerRef.current = window.setTimeout(() => {
-        void fetchJobs();
-      }, 2000);
-    } else {
-      setRunning(false);
+      setError(e?.message ?? "Не удалось получить статус remote test");
       stopPolling();
     }
-  }, [deviceId, stopPolling]);
+  }, [deviceId, running, stopPolling]);
 
   async function runRemoteTest() {
     if (!deviceId) {
