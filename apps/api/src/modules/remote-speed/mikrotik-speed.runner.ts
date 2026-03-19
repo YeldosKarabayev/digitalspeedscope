@@ -59,8 +59,15 @@ function parseIntSafe(value: string | undefined): number | null {
 }
 
 function pick(raw: string, key: string): string | undefined {
-  const re = new RegExp(`${key}:\\s+(.+)`);
-  return raw.match(re)?.[1]?.trim();
+  const target = `${key.toLowerCase()}:`;
+
+  const line = raw
+    .split("\n")
+    .map((s) => s.trim())
+    .find((s) => s.toLowerCase().startsWith(target));
+
+  if (!line) return undefined;
+  return line.slice(line.indexOf(":") + 1).trim();
 }
 
 function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
@@ -82,6 +89,15 @@ function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
   return parts.join(" ");
 }
 
+function normalizeCliOutput(raw: string): string {
+  return raw
+    .replace(/\r/g, "")
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function execSshCommand(conn: SshConn, command: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const client = new Client();
@@ -89,44 +105,66 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
     const errs: Buffer[] = [];
     const readyTimeout = conn.timeoutMs ?? 70_000;
 
-    const cleanup = () => {
+    let settled = false;
+    let forceCloseTimer: NodeJS.Timeout | null = null;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+
+      if (forceCloseTimer) {
+        clearTimeout(forceCloseTimer);
+        forceCloseTimer = null;
+      }
+
       try {
         client.end();
-      } catch { }
+      } catch {}
       try {
         client.destroy();
-      } catch { }
+      } catch {}
+
+      fn();
     };
 
     client
       .on("ready", () => {
         client.exec(command, { pty: true }, (err, stream) => {
           if (err) {
-            cleanup();
-            reject(err);
+            finish(() => reject(err));
             return;
           }
+
+          forceCloseTimer = setTimeout(() => {
+            try {
+              stream.close();
+            } catch {}
+            finish(() => reject(new Error(`SSH command timeout after ${readyTimeout}ms`)));
+          }, readyTimeout);
 
           stream.on("close", () => {
             const stdout = Buffer.concat(chunks).toString("utf8");
             const stderr = Buffer.concat(errs).toString("utf8");
-            cleanup();
 
-            if (stderr.trim()) {
-              reject(new Error(stderr.trim()));
-              return;
-            }
-
-            resolve(stdout);
+            finish(() => {
+              if (stderr.trim()) {
+                reject(new Error(stderr.trim()));
+                return;
+              }
+              resolve(stdout);
+            });
           });
 
           stream.on("data", (data: Buffer) => chunks.push(data));
           stream.stderr.on("data", (data: Buffer) => errs.push(data));
+
+          stream.on("error", (streamErr) => {
+            finish(() => reject(streamErr));
+          });
         });
       })
       .on("error", (err) => {
-        cleanup();
-        reject(err);
+        finish(() => reject(err));
       })
       .connect({
         host: conn.host,
@@ -146,8 +184,9 @@ export class MikrotikSpeedRunner {
   ): Promise<RemoteSpeedResult> {
     const command = buildBandwidthCommand(p);
     const raw = await execSshCommand(conn, command);
+    const normalized = normalizeCliOutput(raw);
 
-    const normalized = raw.replace(/\r/g, "");
+    console.log("BTEST RAW >>>\n" + normalized);
 
     if (/authentication failed/i.test(normalized)) {
       throw new InternalServerErrorException("Bandwidth-test authentication failed");
@@ -155,6 +194,10 @@ export class MikrotikSpeedRunner {
 
     if (/invalid user name or password/i.test(normalized)) {
       throw new InternalServerErrorException("RouterOS SSH authentication failed");
+    }
+
+    if (/could not connect/i.test(normalized)) {
+      throw new InternalServerErrorException("Bandwidth-test could not connect to target");
     }
 
     const txAvg =
@@ -166,15 +209,14 @@ export class MikrotikSpeedRunner {
       parseRateToMbps(pick(normalized, "rx-total-average")) ||
       parseRateToMbps(pick(normalized, "rx-10-second-average")) ||
       parseRateToMbps(pick(normalized, "rx-current"));
+
     const localCpuLoad = parsePercent(pick(normalized, "local-cpu-load"));
     const remoteCpuLoad = parsePercent(pick(normalized, "remote-cpu-load"));
     const connectionCount = parseIntSafe(pick(normalized, "connection-count"));
 
     const hasAnyTraffic = txAvg > 0 || rxAvg > 0;
     if (!hasAnyTraffic) {
-      throw new InternalServerErrorException(
-        `Bandwidth-test finished with zero traffic. Raw output:\n${normalized}`,
-      );
+      throw new InternalServerErrorException("Bandwidth-test finished with zero traffic");
     }
 
     return {
