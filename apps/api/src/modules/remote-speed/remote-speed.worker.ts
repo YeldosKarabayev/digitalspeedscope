@@ -4,7 +4,6 @@ import { PrismaService } from "../../prisma/prisma.module";
 import { RemotePingRunner } from "./remote-ping.runner";
 import { BandwidthTestError, MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 
-
 function calcStatus(pingMs: number | null, packetLoss: number | null) {
   if (pingMs == null || pingMs <= 0) return "POOR";
   if ((packetLoss ?? 0) >= 5 || pingMs >= 150) return "POOR";
@@ -17,6 +16,22 @@ function randomInt(min: number, max: number) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 @Injectable()
 export class RemoteSpeedWorker {
   private readonly logger = new Logger(RemoteSpeedWorker.name);
@@ -25,7 +40,7 @@ export class RemoteSpeedWorker {
     private readonly prisma: PrismaService,
     private readonly pingRunner: RemotePingRunner,
     private readonly mikrotikSpeedRunner: MikrotikSpeedRunner,
-  ) { }
+  ) {}
 
   @Interval(5000)
   async tick() {
@@ -83,7 +98,7 @@ export class RemoteSpeedWorker {
         password:
           (job.device as any).mikrotikPassword ??
           process.env.MIKROTIK_PASSWORD!,
-        timeoutMs: 70_000,
+        timeoutMs: 30_000,
       };
 
       let ping: {
@@ -134,10 +149,13 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
-        const pingTarget =
-          (job.device as any).pingTarget || "8.8.8.8";
+        const pingTarget = (job.device as any).pingTarget || "8.8.8.8";
 
-        ping = await this.pingRunner.run(apiConn, pingTarget, 5);
+        ping = await withTimeout(
+          this.pingRunner.run(apiConn, pingTarget, 3),
+          20_000,
+          "Remote ping exceeded allowed execution time",
+        );
 
         await this.prisma.remoteSpeedJob.update({
           where: { id: jobId },
@@ -148,19 +166,38 @@ export class RemoteSpeedWorker {
           } as any,
         });
 
-        // const useBtestAuth = process.env.MIKROTIK_BTEST_AUTH === "true";
+        const useBtestAuth = process.env.MIKROTIK_BTEST_AUTH === "true";
 
-        const speed = await this.mikrotikSpeedRunner.runBandwidthTest(sshConn, {
-          targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.20.20.2",
-          durationSec: job.durationSec ?? 20,
-          protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
-          direction: (job.direction as "both" | "transmit" | "receive") ?? "both",
-        });
-        this.logger.log(`BTEST RAW:\n${speed.raw}`);
+        const speed = await withTimeout(
+          this.mikrotikSpeedRunner.runBandwidthTest(sshConn, {
+            targetHost: job.targetHost ?? (job.device as any).bandwidthTarget ?? "10.20.20.2",
+            durationSec: job.durationSec ?? 5,
+            protocol: (job.protocol as "tcp" | "udp") ?? "tcp",
+            direction: (job.direction as "both" | "transmit" | "receive") ?? "transmit",
+            ...(useBtestAuth
+              ? {
+                  user:
+                    (job.device as any).bandwidthTestUser ??
+                    process.env.MIKROTIK_BTEST_USER ??
+                    "admin",
+                  password:
+                    (job.device as any).bandwidthTestPassword ??
+                    process.env.MIKROTIK_BTEST_PASSWORD,
+                }
+              : {}),
+          }),
+          30_000,
+          "Bandwidth-test exceeded allowed execution time",
+        );
 
         downloadMbps = speed.downloadMbps;
         uploadMbps = speed.uploadMbps;
-        rawResult = speed.raw;
+        rawResult = {
+          raw: speed.raw,
+          localCpuLoad: speed.localCpuLoad ?? null,
+          remoteCpuLoad: speed.remoteCpuLoad ?? null,
+          connectionCount: speed.connectionCount ?? null,
+        };
       }
 
       await this.prisma.remoteSpeedJob.update({
