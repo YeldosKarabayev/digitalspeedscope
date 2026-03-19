@@ -209,7 +209,7 @@ export class RemoteSpeedWorker {
           phase: "FAILED",
           message: "Remote speed job failed",
           errorMessage: e?.message ?? "Unknown error",
-          rawResult: e instanceof BandwidthTestError ? { raw: e.raw ?? null } : undefined,
+          rawResult: e instanceof BandwidthTestError ? { raw: e.raw ?? null } : null,
         } as any,
       });
     }
