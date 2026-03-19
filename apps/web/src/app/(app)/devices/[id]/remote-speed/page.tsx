@@ -140,7 +140,7 @@ export default function RemoteSpeedPage() {
   const [target, setTarget] = React.useState("10.20.20.2");
   const [protocol, setProtocol] = React.useState<"tcp" | "udp">("tcp");
   const [direction, setDirection] = React.useState<"both" | "transmit" | "receive">("both");
-  const [durationSec, setDurationSec] = React.useState(20);
+  const [durationSec, setDurationSec] = React.useState(5);
 
   const pollTimerRef = React.useRef<number | null>(null);
 
