@@ -80,12 +80,14 @@ function normalizeCliOutput(raw: string): string {
 function pick(raw: string, key: string): string | undefined {
   const target = `${key.toLowerCase()}:`;
 
-  const line = raw
+  const lines = raw
     .split("\n")
     .map((s) => s.trim())
-    .find((s) => s.toLowerCase().startsWith(target));
+    .filter((s) => s.toLowerCase().startsWith(target));
 
-  if (!line) return undefined;
+  if (lines.length === 0) return undefined;
+
+  const line = lines[lines.length - 1];
   return line.slice(line.indexOf(":") + 1).trim();
 }
 
