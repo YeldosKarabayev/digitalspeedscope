@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
-import { Client } from "ssh2";
+import { Client, ClientChannel } from "ssh2";
 
 export class BandwidthTestError extends Error {
   constructor(
@@ -40,6 +40,21 @@ type SshConn = {
   timeoutMs?: number;
 };
 
+type ParsedLiveStats = {
+  txTotalAverage?: number;
+  tx10SecondAverage?: number;
+  txCurrent?: number;
+  rxTotalAverage?: number;
+  rx10SecondAverage?: number;
+  rxCurrent?: number;
+  localCpuLoad?: number | null;
+  remoteCpuLoad?: number | null;
+  connectionCount?: number | null;
+  authenticationFailed?: boolean;
+  invalidUserOrPassword?: boolean;
+  couldNotConnect?: boolean;
+};
+
 function parseRateToMbps(value: string | undefined): number {
   if (!value) return 0;
 
@@ -68,22 +83,19 @@ function parseIntSafe(value: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function pick(raw: string, key: string): string | undefined {
-  const target = `${key.toLowerCase()}:`;
-
-  const line = raw
-    .split("\n")
-    .map((s) => s.trim())
-    .find((s) => s.toLowerCase().startsWith(target));
-
-  if (!line) return undefined;
-  return line.slice(line.indexOf(":") + 1).trim();
+function normalizeCliOutput(raw: string): string {
+  return raw
+    .replace(/\r/g, "")
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
   const duration = `${Math.max(3, Math.min(p.durationSec ?? 5, 60))}s`;
   const protocol = (p.protocol ?? "tcp").toLowerCase();
-  const direction = (p.direction ?? "both").toLowerCase();
+  const direction = (p.direction ?? "transmit").toLowerCase();
 
   const parts = [
     `/tool bandwidth-test`,
@@ -99,34 +111,100 @@ function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
   return parts.join(" ");
 }
 
-function normalizeCliOutput(raw: string): string {
-  return raw
-    .replace(/\r/g, "")
-    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+function parseKeyValueLine(line: string): { key: string; value: string } | null {
+  const idx = line.indexOf(":");
+  if (idx <= 0) return null;
+
+  const key = line.slice(0, idx).trim().toLowerCase();
+  const value = line.slice(idx + 1).trim();
+
+  if (!key) return null;
+  return { key, value };
 }
 
-function execSshCommand(conn: SshConn, command: string): Promise<string> {
+function parseLiveStats(raw: string): ParsedLiveStats {
+  const normalized = normalizeCliOutput(raw);
+  const lines = normalized.split("\n").map((s) => s.trim()).filter(Boolean);
+
+  const stats: ParsedLiveStats = {};
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+
+    if (lower.includes("authentication failed")) {
+      stats.authenticationFailed = true;
+    }
+    if (lower.includes("invalid user name or password")) {
+      stats.invalidUserOrPassword = true;
+    }
+    if (lower.includes("could not connect")) {
+      stats.couldNotConnect = true;
+    }
+
+    const kv = parseKeyValueLine(line);
+    if (!kv) continue;
+
+    switch (kv.key) {
+      case "tx-total-average":
+        stats.txTotalAverage = parseRateToMbps(kv.value);
+        break;
+      case "tx-10-second-average":
+        stats.tx10SecondAverage = parseRateToMbps(kv.value);
+        break;
+      case "tx-current":
+        stats.txCurrent = parseRateToMbps(kv.value);
+        break;
+      case "rx-total-average":
+        stats.rxTotalAverage = parseRateToMbps(kv.value);
+        break;
+      case "rx-10-second-average":
+        stats.rx10SecondAverage = parseRateToMbps(kv.value);
+        break;
+      case "rx-current":
+        stats.rxCurrent = parseRateToMbps(kv.value);
+        break;
+      case "local-cpu-load":
+        stats.localCpuLoad = parsePercent(kv.value);
+        break;
+      case "remote-cpu-load":
+        stats.remoteCpuLoad = parsePercent(kv.value);
+        break;
+      case "connection-count":
+        stats.connectionCount = parseIntSafe(kv.value);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return stats;
+}
+
+function execBandwidthShell(conn: SshConn, command: string, durationSec: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const client = new Client();
     const chunks: Buffer[] = [];
     const errs: Buffer[] = [];
+
     const readyTimeout = conn.timeoutMs ?? 30_000;
+    const testTimeoutMs = Math.max(10_000, durationSec * 1000 + 8_000);
 
     let settled = false;
-    let forceCloseTimer: NodeJS.Timeout | null = null;
+    let timeoutTimer: NodeJS.Timeout | null = null;
+    let stream: ClientChannel | null = null;
 
     const finish = (fn: () => void) => {
       if (settled) return;
       settled = true;
 
-      if (forceCloseTimer) {
-        clearTimeout(forceCloseTimer);
-        forceCloseTimer = null;
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
       }
 
+      try {
+        stream?.close();
+      } catch {}
       try {
         client.end();
       } catch {}
@@ -139,20 +217,27 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
 
     client
       .on("ready", () => {
-        client.exec(command, { pty: true }, (err, stream) => {
+        client.shell({ term: "vt100", cols: 200, rows: 40 }, (err, shell) => {
           if (err) {
             finish(() => reject(err));
             return;
           }
 
-          forceCloseTimer = setTimeout(() => {
-            try {
-              stream.close();
-            } catch {}
-            finish(() => reject(new Error(`SSH command timeout after ${readyTimeout}ms`)));
-          }, readyTimeout);
+          stream = shell;
 
-          stream.on("close", () => {
+          shell.on("data", (data: Buffer) => {
+            chunks.push(data);
+          });
+
+          shell.stderr.on("data", (data: Buffer) => {
+            errs.push(data);
+          });
+
+          shell.on("error", (shellErr) => {
+            finish(() => reject(shellErr));
+          });
+
+          shell.on("close", () => {
             const stdout = Buffer.concat(chunks).toString("utf8");
             const stderr = Buffer.concat(errs).toString("utf8");
 
@@ -165,12 +250,23 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
             });
           });
 
-          stream.on("data", (data: Buffer) => chunks.push(data));
-          stream.stderr.on("data", (data: Buffer) => errs.push(data));
-          stream.on("error", (streamErr) => finish(() => reject(streamErr)));
+          shell.write(command + "\n");
+
+          timeoutTimer = setTimeout(() => {
+            try {
+              shell.write("\u0003"); // Ctrl+C
+            } catch {}
+
+            setTimeout(() => {
+              const stdout = Buffer.concat(chunks).toString("utf8");
+              finish(() => resolve(stdout));
+            }, 1200);
+          }, testTimeoutMs);
         });
       })
-      .on("error", (err) => finish(() => reject(err)))
+      .on("error", (err) => {
+        finish(() => reject(err));
+      })
       .connect({
         host: conn.host,
         port: conn.port ?? 22,
@@ -187,35 +283,39 @@ export class MikrotikSpeedRunner {
     conn: SshConn,
     p: RemoteSpeedRunParams,
   ): Promise<RemoteSpeedResult> {
-    const command = buildBandwidthCommand(p);
-    const raw = await execSshCommand(conn, command);
+    const durationSec = Math.max(3, Math.min(p.durationSec ?? 5, 60));
+    const command = buildBandwidthCommand({
+      ...p,
+      durationSec,
+    });
+
+    const raw = await execBandwidthShell(conn, command, durationSec);
     const normalized = normalizeCliOutput(raw);
+    const stats = parseLiveStats(normalized);
 
-    const txAvg =
-      parseRateToMbps(pick(normalized, "tx-total-average")) ||
-      parseRateToMbps(pick(normalized, "tx-10-second-average")) ||
-      parseRateToMbps(pick(normalized, "tx-current"));
-
-    const rxAvg =
-      parseRateToMbps(pick(normalized, "rx-total-average")) ||
-      parseRateToMbps(pick(normalized, "rx-10-second-average")) ||
-      parseRateToMbps(pick(normalized, "rx-current"));
-
-    const localCpuLoad = parsePercent(pick(normalized, "local-cpu-load"));
-    const remoteCpuLoad = parsePercent(pick(normalized, "remote-cpu-load"));
-    const connectionCount = parseIntSafe(pick(normalized, "connection-count"));
-
-    if (/authentication failed/i.test(normalized)) {
+    if (stats.authenticationFailed) {
       throw new BandwidthTestError("Bandwidth-test authentication failed", normalized);
     }
 
-    if (/invalid user name or password/i.test(normalized)) {
+    if (stats.invalidUserOrPassword) {
       throw new BandwidthTestError("RouterOS SSH authentication failed", normalized);
     }
 
-    if (/could not connect/i.test(normalized)) {
+    if (stats.couldNotConnect) {
       throw new BandwidthTestError("Bandwidth-test could not connect to target", normalized);
     }
+
+    const txAvg =
+      stats.txTotalAverage ||
+      stats.tx10SecondAverage ||
+      stats.txCurrent ||
+      0;
+
+    const rxAvg =
+      stats.rxTotalAverage ||
+      stats.rx10SecondAverage ||
+      stats.rxCurrent ||
+      0;
 
     const hasAnyTraffic = txAvg > 0 || rxAvg > 0;
     if (!hasAnyTraffic) {
@@ -227,9 +327,9 @@ export class MikrotikSpeedRunner {
       uploadMbps: txAvg,
       pingMs: 0,
       raw: normalized,
-      localCpuLoad,
-      remoteCpuLoad,
-      connectionCount,
+      localCpuLoad: stats.localCpuLoad ?? null,
+      remoteCpuLoad: stats.remoteCpuLoad ?? null,
+      connectionCount: stats.connectionCount ?? null,
     };
   }
 }
