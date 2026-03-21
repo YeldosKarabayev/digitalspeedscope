@@ -7,10 +7,11 @@ import { RemoteSpeedWorker } from "./remote-speed.worker";
 import { RemotePingRunner } from "./remote-ping.runner";
 import { RemoteTrafficRunner } from "./remote-traffic.runner";
 import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
+import { RemotePingController } from "./remote-ping.controller";
 
 @Module({
   imports: [PrismaModule, MikrotikModule],
-  controllers: [RemoteSpeedController],
+  controllers: [RemoteSpeedController, RemotePingController],
   providers: [
     RemoteSpeedService,
     RemoteSpeedWorker,
