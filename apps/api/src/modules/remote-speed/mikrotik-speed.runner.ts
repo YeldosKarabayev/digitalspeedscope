@@ -204,13 +204,13 @@ function execBandwidthShell(conn: SshConn, command: string, durationSec: number)
 
       try {
         stream?.close();
-      } catch {}
+      } catch { }
       try {
         client.end();
-      } catch {}
+      } catch { }
       try {
         client.destroy();
-      } catch {}
+      } catch { }
 
       fn();
     };
@@ -255,7 +255,7 @@ function execBandwidthShell(conn: SshConn, command: string, durationSec: number)
           timeoutTimer = setTimeout(() => {
             try {
               shell.write("\u0003"); // Ctrl+C
-            } catch {}
+            } catch { }
 
             setTimeout(() => {
               const stdout = Buffer.concat(chunks).toString("utf8");
@@ -318,9 +318,23 @@ export class MikrotikSpeedRunner {
       0;
 
     const hasAnyTraffic = txAvg > 0 || rxAvg > 0;
+
+    console.error("=== BTEST NORMALIZED OUTPUT START ===");
+    console.error(normalized);
+    console.error("=== BTEST NORMALIZED OUTPUT END ===");
+
     if (!hasAnyTraffic) {
       throw new BandwidthTestError("Bandwidth-test finished with zero traffic", normalized);
     }
+
+    console.error("BTEST PARSED", {
+      txTotalAverage: stats.txTotalAverage,
+      tx10SecondAverage: stats.tx10SecondAverage,
+      txCurrent: stats.txCurrent,
+      rxTotalAverage: stats.rxTotalAverage,
+      rx10SecondAverage: stats.rx10SecondAverage,
+      rxCurrent: stats.rxCurrent,
+    });
 
     return {
       downloadMbps: rxAvg,
