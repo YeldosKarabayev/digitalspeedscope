@@ -144,8 +144,8 @@ model PortalAccess {
   identityId String
   identity   PortalIdentity @relation(fields: [identityId], references: [id])
 
-  pointId String
-  point   Point  @relation(fields: [pointId], references: [id])
+  pointId String?
+  point   Point? @relation(fields: [pointId], references: [id])
 
   deviceKey String
 
