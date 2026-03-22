@@ -1,15 +1,25 @@
-import { IsString, Length, Matches } from "class-validator";
+import { IsOptional, IsString, Matches, MinLength } from "class-validator";
 
 export class VerifyCodeDto {
   @IsString()
-  @Matches(/^7\d{10}$/)
-  phone!: string;
+  @Matches(/^7\d{10}$/, { message: "Телефон должен быть в формате 7XXXXXXXXXX" })
+  phone: string;
 
   @IsString()
-  @Length(4, 6)
-  code!: string;
+  @MinLength(4)
+  code: string;
 
   @IsString()
-  @Length(8, 64)
-  deviceKey!: string;
+  deviceKey: string;
+
+  @IsString()
+  pointId: string;
+
+  @IsOptional()
+  @IsString()
+  clientIp?: string;
+
+  @IsOptional()
+  @IsString()
+  clientMac?: string;
 }

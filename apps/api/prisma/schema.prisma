@@ -65,10 +65,13 @@ model Point {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  measurements Measurement[]
-  incidents    Incident[]
-  health       DeviceHealth  @default(ONLINE)
-  lastSeenAt   DateTime?
+  measurements    Measurement[]
+  incidents       Incident[]
+  health          DeviceHealth     @default(ONLINE)
+  lastSeenAt      DateTime?
+  portalSessions  PortalSession[]
+  portalAccesses  PortalAccess[]
+  portalAuditLogs PortalAuditLog[]
 
   @@index([cityId])
 }
@@ -107,6 +110,12 @@ model PortalSession {
   verifiedAt DateTime?
   attempts   Int       @default(0)
 
+  pointId String?
+  point   Point?  @relation(fields: [pointId], references: [id])
+
+  clientIp  String?
+  clientMac String?
+
   ip        String?
   userAgent String?
 
@@ -114,6 +123,8 @@ model PortalSession {
 
   @@index([phone])
   @@index([expiresAt])
+  @@index([pointId, createdAt])
+  @@index([clientMac])
 }
 
 model PortalIdentity {
@@ -133,17 +144,47 @@ model PortalAccess {
   identityId String
   identity   PortalIdentity @relation(fields: [identityId], references: [id])
 
-  // для MVP: “навсегда” фиксируем устройство через fingerprint/cookieId
+  pointId String
+  point   Point  @relation(fields: [pointId], references: [id])
+
   deviceKey String
 
-  firstSeenAt DateTime @default(now())
-  lastSeenAt  DateTime @default(now())
+  clientIp  String?
+  clientMac String?
+
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  grantedAt   DateTime?
+  expiresAt   DateTime?
 
   ip        String?
   userAgent String?
 
-  @@unique([identityId, deviceKey])
+  @@unique([identityId, pointId, deviceKey])
   @@index([deviceKey])
+  @@index([pointId])
+  @@index([clientMac])
+  @@index([expiresAt])
+}
+
+model PortalAuditLog {
+  id      String  @id @default(cuid())
+  pointId String?
+  point   Point?  @relation(fields: [pointId], references: [id])
+
+  phone   String?
+  event   String
+  status  String
+  message String?
+
+  clientIp  String?
+  clientMac String?
+  requestIp String?
+
+  createdAt DateTime @default(now())
+
+  @@index([pointId, createdAt])
+  @@index([phone, createdAt])
 }
 
 enum UserRole {
