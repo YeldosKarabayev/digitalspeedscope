@@ -182,11 +182,13 @@ export class RemoteSpeedWorker {
 
   private resolveQueueTarget(job: JobWithDevice): string {
     const device: any = job?.device;
+
     const target =
       device?.lastIp ??
       device?.tunnelIp ??
       device?.wgIp ??
       device?.vxlanIp ??
+      device?.mikrotikHost ??
       null;
 
     if (!target) {
