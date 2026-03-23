@@ -29,6 +29,9 @@ type AddSimpleQueueParams = {
 
 @Injectable()
 export class MikrotikService {
+  exec(arg0: { host: string; command: string; }) {
+      throw new Error("Method not implemented.");
+  }
   constructor(
     private readonly prisma: PrismaService,
     private readonly mikrotikApiService: MikrotikApiService,

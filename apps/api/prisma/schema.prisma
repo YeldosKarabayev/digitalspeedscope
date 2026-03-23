@@ -37,6 +37,9 @@ model Device {
   mikrotikUsername   String?
   mikrotikSecretRef  String? // ссылка на секрет (не пароль plaintext)
 
+  queueTargetIp      String? // IP точки внутри туннеля для CHR queue
+  btestTargetHost    String? // override, если когда-то будет не один CHR
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

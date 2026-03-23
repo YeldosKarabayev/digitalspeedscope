@@ -183,7 +183,18 @@ export class RemoteSpeedWorker {
   private resolveQueueTarget(job: JobWithDevice): string {
     const device: any = job?.device;
 
+    const targetHost =
+      job.targetHost ??
+      device.btestTargetHost ??
+      process.env.CHR_BTEST_TARGET ??
+      process.env.CHR_HOST;
+
+    if (!targetHost) {
+      throw new Error("CHR bandwidth-test target is not configured");
+    }
+
     const target =
+      device?.queueTargetIp ??
       device?.lastIp ??
       device?.tunnelIp ??
       device?.wgIp ??
@@ -240,6 +251,7 @@ export class RemoteSpeedWorker {
       durationSec: number;
       protocol: "tcp" | "udp";
       direction: "both" | "transmit" | "receive";
+      connectionCount?: number;
       user?: string;
       password?: string;
     },
@@ -281,6 +293,7 @@ export class RemoteSpeedWorker {
       targetHost: string;
       durationSec: number;
       protocol: "tcp" | "udp";
+      connectionCount: number;
       user?: string;
       password?: string;
     },
@@ -292,6 +305,7 @@ export class RemoteSpeedWorker {
       durationSec: params.durationSec,
       protocol: params.protocol,
       direction: params.direction,
+      connectionCount: params.connectionCount,
       ...(params.user ? { user: params.user } : {}),
       ...(params.password ? { password: params.password } : {}),
     });
@@ -386,6 +400,8 @@ export class RemoteSpeedWorker {
         resolvedProfile: profileKey,
         targetMbps: profile.targetMbps,
         healthBefore: health,
+        queueTargetIp: this.resolveQueueTarget(job),
+        btestTargetHost: targetHost,
       });
 
       await this.setPhase(
@@ -449,15 +465,14 @@ export class RemoteSpeedWorker {
         message: `Running upload test (${profileKey})`,
         targetHost,
         durationSec,
-        protocol,
+        protocol: "udp",
+        connectionCount: 20,
         ...authPart,
       });
 
-      // Небольшая пауза между направлениями
       await this.setPhase(jobId, "RUNNING", 60, "Stabilizing before download test");
       await sleep(2000);
 
-      // 2. Download: receive
       const downloadTest = await this.runOneDirection(job, sshConn, {
         label: "download",
         direction: "receive",
@@ -465,7 +480,8 @@ export class RemoteSpeedWorker {
         message: `Running download test (${profileKey})`,
         targetHost,
         durationSec,
-        protocol,
+        protocol: "tcp",
+        connectionCount: 40,
         ...authPart,
       });
 

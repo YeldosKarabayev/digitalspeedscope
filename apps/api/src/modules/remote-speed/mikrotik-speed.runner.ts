@@ -16,6 +16,7 @@ export type RemoteSpeedRunParams = {
   durationSec?: number;
   protocol?: "tcp" | "udp";
   direction?: "both" | "transmit" | "receive";
+  onnectionCount?: number;
   user?: string;
   password?: string;
 };

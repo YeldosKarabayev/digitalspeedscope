@@ -8,12 +8,8 @@ import { DSS_PROFILES } from "./remote-speed.constants";
 
 export type CreateRemoteSpeedJobInput = {
   profile?: "auto" | "lite50" | "std100" | "plus150";
-  target?: string;
-  interfaceName?: string;
-  count?: number;
-  durationSec?: number;
   protocol?: "tcp" | "udp";
-  direction?: "both" | "transmit" | "receive";
+  durationSec?: number;
 };
 
 @Injectable()
@@ -33,6 +29,10 @@ export class RemoteSpeedService {
       throw new BadRequestException("Device has no mikrotikHost");
     }
 
+    if (!device.queueTargetIp && !device.lastIp && !device.mikrotikHost) {
+      throw new BadRequestException("Device has no queueTargetIp");
+    }
+
     const requestedProfile = body.profile ?? "std100";
     const resolvedProfile =
       requestedProfile === "auto" ? "std100" : requestedProfile;
@@ -43,13 +43,13 @@ export class RemoteSpeedService {
     }
 
     const targetHost =
-      body.target ??
-      (device as any).bandwidthTarget ??
-      process.env.CHR_BTEST_TARGET;
+      device.btestTargetHost ??
+      process.env.CHR_BTEST_TARGET ??
+      process.env.CHR_HOST;
 
     if (!targetHost) {
       throw new BadRequestException(
-        "target is required or CHR_BTEST_TARGET must be set",
+        "CHR target is not configured. Set device.btestTargetHost or CHR_BTEST_TARGET/CHR_HOST",
       );
     }
 
@@ -71,14 +71,14 @@ export class RemoteSpeedService {
     }
 
     const protocol = body.protocol ?? profile.protocol;
-    const direction = body.direction ?? "transmit";
     const durationSec = body.durationSec ?? profile.durationSec;
 
     const rawResult = {
       requestedProfile,
       resolvedProfile,
       targetMbps: profile.targetMbps,
-      interfaceName: body.interfaceName ?? null,
+      queueTargetIp: device.queueTargetIp ?? device.lastIp ?? device.mikrotikHost,
+      btestTargetHost: targetHost,
       requestedAt: new Date().toISOString(),
     };
 
@@ -91,7 +91,7 @@ export class RemoteSpeedService {
         message: `Job queued (${requestedProfile})`,
         targetHost,
         protocol,
-        direction,
+        direction: "transmit",
         durationSec,
         rawResult: rawResult as any,
         errorMessage: null,
