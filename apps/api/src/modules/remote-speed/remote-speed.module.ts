@@ -8,6 +8,7 @@ import { RemotePingRunner } from "./remote-ping.runner";
 import { RemoteTrafficRunner } from "./remote-traffic.runner";
 import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 import { RemotePingController } from "./remote-ping.controller";
+import { RemoteHealthRunner } from "./remote-health.runner";
 
 @Module({
   imports: [PrismaModule, MikrotikModule],
@@ -18,6 +19,7 @@ import { RemotePingController } from "./remote-ping.controller";
     RemotePingRunner,
     RemoteTrafficRunner,
     MikrotikSpeedRunner,
+    RemoteHealthRunner,
   ],
   exports: [RemoteSpeedService],
 })
