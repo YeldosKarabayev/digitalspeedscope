@@ -5,24 +5,49 @@ import { MikrotikService } from "../mikrotik/mikrotik.service";
 export class ChrQueueService {
   constructor(private readonly mikrotik: MikrotikService) {}
 
+  private getChrConn() {
+    const host = process.env.CHR_HOST;
+    const username =
+      process.env.CHR_USERNAME ?? process.env.MIKROTIK_USERNAME ?? "admin";
+    const password = process.env.CHR_PASSWORD ?? process.env.MIKROTIK_PASSWORD;
+    const port = Number(process.env.CHR_API_PORT ?? 8728);
+
+    if (!host) {
+      throw new Error("CHR_HOST is not configured");
+    }
+
+    if (!password) {
+      throw new Error("CHR_PASSWORD or MIKROTIK_PASSWORD is not configured");
+    }
+
+    return { host, username, password, port };
+  }
+
   async attach(deviceIp: string, runId: string, maxMbps: number) {
-    return this.mikrotik.exec({
-      host: process.env.CHR_HOST!,
-      command: `
-        /queue simple add \
-        name="dss-${runId}" \
-        target=${deviceIp} \
-        max-limit=${maxMbps}M/${maxMbps}M
-      `,
+    const chr = this.getChrConn();
+
+    return this.mikrotik.addSimpleQueue({
+      host: chr.host,
+      port: chr.port,
+      username: chr.username,
+      password: chr.password,
+      timeoutMs: 15_000,
+      name: `dss-${runId}`,
+      target: deviceIp,
+      maxLimitMbps: maxMbps,
     });
   }
 
   async detach(runId: string) {
-    return this.mikrotik.exec({
-      host: process.env.CHR_HOST!,
-      command: `
-        /queue simple remove [find name="dss-${runId}"]
-      `,
+    const chr = this.getChrConn();
+
+    return this.mikrotik.removeSimpleQueueByName({
+      host: chr.host,
+      port: chr.port,
+      username: chr.username,
+      password: chr.password,
+      timeoutMs: 15_000,
+      name: `dss-${runId}`,
     });
   }
 }
