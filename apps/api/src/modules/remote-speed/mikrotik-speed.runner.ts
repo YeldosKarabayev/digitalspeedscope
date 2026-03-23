@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { Client } from "ssh2";
 
 export class BandwidthTestError extends Error {
@@ -16,7 +16,7 @@ export type RemoteSpeedRunParams = {
   durationSec?: number;
   protocol?: "tcp" | "udp";
   direction?: "both" | "transmit" | "receive";
-  onnectionCount?: number;
+  connectionCount?: number;
   user?: string;
   password?: string;
 };
@@ -96,6 +96,7 @@ function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
   const duration = `${Math.max(3, Math.min(p.durationSec ?? 5, 60))}s`;
   const protocol = (p.protocol ?? "tcp").toLowerCase();
   const direction = (p.direction ?? "transmit").toLowerCase();
+  const connectionCount = Math.max(1, Math.min(p.connectionCount ?? 20, 200));
 
   const parts = [
     `/tool bandwidth-test`,
@@ -103,10 +104,16 @@ function buildBandwidthCommand(p: RemoteSpeedRunParams): string {
     `duration=${duration}`,
     `protocol=${protocol}`,
     `direction=${direction}`,
+    `connection-count=${connectionCount}`,
   ];
 
-  if (p.user) parts.push(`user=${p.user}`);
-  if (p.password) parts.push(`password="${p.password}"`);
+  if (p.user) {
+    parts.push(`user=${p.user}`);
+  }
+
+  if (p.password) {
+    parts.push(`password="${p.password}"`);
+  }
 
   return parts.join(" ");
 }
@@ -133,6 +140,7 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
       try {
         client.end();
       } catch {}
+
       try {
         client.destroy();
       } catch {}
@@ -152,7 +160,10 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
             try {
               stream.close();
             } catch {}
-            finish(() => reject(new Error(`SSH command timeout after ${timeoutMs}ms`)));
+
+            finish(() =>
+              reject(new Error(`SSH command timeout after ${timeoutMs}ms`)),
+            );
           }, timeoutMs);
 
           stream.on("data", (data: Buffer) => chunks.push(data));
@@ -167,6 +178,7 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
                 reject(new Error(stderr.trim()));
                 return;
               }
+
               resolve(stdout);
             });
           });
@@ -191,35 +203,9 @@ function execSshCommand(conn: SshConn, command: string): Promise<string> {
 
 @Injectable()
 export class MikrotikSpeedRunner {
-  async runBandwidthTest(
-    conn: SshConn,
-    p: RemoteSpeedRunParams,
-  ): Promise<RemoteSpeedResult> {
-    const durationSec = Math.max(3, Math.min(p.durationSec ?? 5, 60));
-    const command = buildBandwidthCommand({
-      ...p,
-      durationSec,
-    });
+  private readonly logger = new Logger(MikrotikSpeedRunner.name);
 
-    const raw = await execSshCommand(conn, command);
-    const normalized = normalizeCliOutput(raw);
-
-    console.error("=== BTEST NORMALIZED OUTPUT START ===");
-    console.error(normalized);
-    console.error("=== BTEST NORMALIZED OUTPUT END ===");
-
-    if (/authentication failed/i.test(normalized)) {
-      throw new BandwidthTestError("Bandwidth-test authentication failed", normalized);
-    }
-
-    if (/invalid user name or password/i.test(normalized)) {
-      throw new BandwidthTestError("RouterOS SSH authentication failed", normalized);
-    }
-
-    if (/could not connect/i.test(normalized)) {
-      throw new BandwidthTestError("Bandwidth-test could not connect to target", normalized);
-    }
-
+  private parseNormalizedOutput(normalized: string): RemoteSpeedResult {
     const txAvg =
       parseRateToMbps(pick(normalized, "tx-total-average")) ||
       parseRateToMbps(pick(normalized, "tx-10-second-average")) ||
@@ -230,7 +216,7 @@ export class MikrotikSpeedRunner {
       parseRateToMbps(pick(normalized, "rx-10-second-average")) ||
       parseRateToMbps(pick(normalized, "rx-current"));
 
-    console.error("BTEST PARSED", {
+    const parsed = {
       txTotalAverage: pick(normalized, "tx-total-average"),
       tx10SecondAverage: pick(normalized, "tx-10-second-average"),
       txCurrent: pick(normalized, "tx-current"),
@@ -239,10 +225,15 @@ export class MikrotikSpeedRunner {
       rxCurrent: pick(normalized, "rx-current"),
       txAvg,
       rxAvg,
-    });
+    };
+
+    this.logger.debug(`BTEST PARSED ${JSON.stringify(parsed)}`);
 
     if (txAvg <= 0 && rxAvg <= 0) {
-      throw new BandwidthTestError("Bandwidth-test finished with zero traffic", normalized);
+      throw new BandwidthTestError(
+        "Bandwidth-test finished with zero traffic",
+        normalized,
+      );
     }
 
     return {
@@ -254,5 +245,90 @@ export class MikrotikSpeedRunner {
       remoteCpuLoad: parsePercent(pick(normalized, "remote-cpu-load")),
       connectionCount: parseIntSafe(pick(normalized, "connection-count")),
     };
+  }
+
+  private async runOnce(
+    conn: SshConn,
+    p: RemoteSpeedRunParams,
+  ): Promise<RemoteSpeedResult> {
+    const durationSec = Math.max(3, Math.min(p.durationSec ?? 5, 60));
+    const command = buildBandwidthCommand({
+      ...p,
+      durationSec,
+    });
+
+    this.logger.debug(`BTEST CMD: ${command}`);
+
+    const raw = await execSshCommand(conn, command);
+    const normalized = normalizeCliOutput(raw);
+
+    this.logger.debug("=== BTEST NORMALIZED OUTPUT START ===");
+    this.logger.debug(normalized);
+    this.logger.debug("=== BTEST NORMALIZED OUTPUT END ===");
+
+    if (/authentication failed/i.test(normalized)) {
+      throw new BandwidthTestError(
+        "Bandwidth-test authentication failed",
+        normalized,
+      );
+    }
+
+    if (/invalid user name or password/i.test(normalized)) {
+      throw new BandwidthTestError(
+        "RouterOS SSH authentication failed",
+        normalized,
+      );
+    }
+
+    if (/could not connect/i.test(normalized)) {
+      throw new BandwidthTestError(
+        "Bandwidth-test could not connect to target",
+        normalized,
+      );
+    }
+
+    return this.parseNormalizedOutput(normalized);
+  }
+
+  async runBandwidthTest(
+    conn: SshConn,
+    p: RemoteSpeedRunParams,
+  ): Promise<RemoteSpeedResult> {
+    const baseParams: RemoteSpeedRunParams = {
+      ...p,
+      durationSec: Math.max(3, Math.min(p.durationSec ?? 5, 60)),
+      connectionCount: Math.max(1, Math.min(p.connectionCount ?? 20, 200)),
+    };
+
+    const first = await this.runOnce(conn, baseParams);
+
+    const isWeakReceive =
+      (baseParams.direction ?? "transmit") === "receive" &&
+      first.downloadMbps > 0 &&
+      first.downloadMbps < 10;
+
+    if (!isWeakReceive) {
+      return first;
+    }
+
+    const boostedCount = Math.max(
+      40,
+      Math.min((baseParams.connectionCount ?? 20) * 2, 60),
+    );
+
+    if (boostedCount === baseParams.connectionCount) {
+      return first;
+    }
+
+    this.logger.warn(
+      `Weak receive result detected (${first.downloadMbps} Mbps), retrying with connection-count=${boostedCount}`,
+    );
+
+    const retry = await this.runOnce(conn, {
+      ...baseParams,
+      connectionCount: boostedCount,
+    });
+
+    return retry.downloadMbps >= first.downloadMbps ? retry : first;
   }
 }
