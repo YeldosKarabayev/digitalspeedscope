@@ -605,6 +605,7 @@ export class RemoteSpeedWorker {
         data: {
           deviceId: job.deviceId,
           downloadMbps,
+          realDownloadMbps: realDownloadMbps ?? null,
           uploadMbps,
           pingMs: health.latencyMs ?? 0,
           jitterMs: null,

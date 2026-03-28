@@ -214,6 +214,7 @@ export default function MeasurementsScreen() {
                   <TableHead className="text-slate-400">Устройство</TableHead>
                   <TableHead className="text-slate-400">Точка</TableHead>
                   <TableHead className="text-right text-slate-400">DL</TableHead>
+                  <TableHead className="text-right text-slate-400">Real DL</TableHead>
                   <TableHead className="text-right text-slate-400">UL</TableHead>
                   <TableHead className="text-right text-slate-400">Ping</TableHead>
                 </TableRow>
@@ -247,6 +248,15 @@ export default function MeasurementsScreen() {
 
                     <TableCell className="text-right font-medium text-slate-100">
                       {r.download} <span className="text-xs text-slate-400">Мбит/с</span>
+                    </TableCell>
+                    <TableCell className="text-right font-medium text-slate-100">
+                      {r.realDownload != null ? (
+                        <>
+                          {r.realDownload} <span className="text-xs text-slate-400">Мбит/с</span>
+                        </>
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-medium text-slate-100">
                       {r.upload} <span className="text-xs text-slate-400">Мбит/с</span>

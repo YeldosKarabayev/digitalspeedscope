@@ -37,8 +37,8 @@ model Device {
   mikrotikUsername   String?
   mikrotikSecretRef  String? // ссылка на секрет (не пароль plaintext)
 
-  queueTargetIp      String? // IP точки внутри туннеля для CHR queue
-  btestTargetHost    String? // override, если когда-то будет не один CHR
+  queueTargetIp   String? // IP точки внутри туннеля для CHR queue
+  btestTargetHost String? // override, если когда-то будет не один CHR
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -70,6 +70,7 @@ model Point {
 
   measurements    Measurement[]
   incidents       Incident[]
+  alerts          Alert[]
   health          DeviceHealth     @default(ONLINE)
   lastSeenAt      DateTime?
   portalSessions  PortalSession[]
@@ -88,9 +89,10 @@ model Measurement {
   pointId String?
   point   Point?  @relation(fields: [pointId], references: [id])
 
-  downloadMbps Int
-  uploadMbps   Int
-  pingMs       Int
+  downloadMbps     Int
+  uploadMbps       Int
+  pingMs           Int
+  realDownloadMbps Float?
 
   remoteSpeedJob RemoteSpeedJob?
 
@@ -148,7 +150,7 @@ model PortalAccess {
   identity   PortalIdentity @relation(fields: [identityId], references: [id])
 
   pointId String?
-  point   Point? @relation(fields: [pointId], references: [id])
+  point   Point?  @relation(fields: [pointId], references: [id])
 
   deviceKey String
 
@@ -315,18 +317,18 @@ model RemoteSpeedJob {
 }
 
 model Alert {
-  id        String   @id @default(cuid())
-  type      String
-  severity  String   // INFO | WARNING | ERROR
-  message   String
-  isRead    Boolean  @default(false)
+  id       String  @id @default(cuid())
+  type     String
+  severity String // INFO | WARNING | ERROR
+  message  String
+  isRead   Boolean @default(false)
 
-  pointId   String?
-  point     Point?   @relation(fields: [pointId], references: [id])
+  pointId String?
+  point   Point?  @relation(fields: [pointId], references: [id])
 
-  meta      Json?
+  meta Json?
 
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
   readAt    DateTime?
 
   @@index([createdAt])

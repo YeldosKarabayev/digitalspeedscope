@@ -41,6 +41,7 @@ export class MeasurementsService {
         ts: m.createdAt.toISOString(),
         status: m.status,
         download: m.downloadMbps,
+        realDownload: m.realDownloadMbps,
         upload: m.uploadMbps,
         ping: m.pingMs,
         deviceUid: m.device.uid,
