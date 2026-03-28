@@ -62,6 +62,7 @@ export type MeasurementsListResponse = {
   limit: number;
   offset: number;
   rows: Array<{
+    realDownload: number | null;
     id: string;
     ts: string;
     status: MeasurementStatus;
