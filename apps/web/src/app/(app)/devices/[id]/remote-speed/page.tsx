@@ -71,6 +71,28 @@ type DirectionTestDetails = {
   localCpuLoad?: number | null;
   remoteCpuLoad?: number | null;
   connectionCount?: number | null;
+  uploadMbps?: number | null;
+  downloadMbps?: number | null;
+  command?: string | null;
+};
+
+type FetchTestDetails = {
+  url?: string;
+  durationSec?: number;
+  bytesDownloaded?: number | null;
+  throughputMbps?: number | null;
+  timedOut?: boolean;
+  success?: boolean;
+  raw?: string | null;
+  command?: string | null;
+};
+
+type DiagnosisDetails = {
+  suspectedCause?: string | null;
+  fetchSmallMbps?: number | null;
+  fetchSmallTimedOut?: boolean | null;
+  fetchLargeMbps?: number | null;
+  fetchLargeTimedOut?: boolean | null;
 };
 
 type RemoteSpeedJob = {
@@ -101,13 +123,23 @@ type RemoteSpeedJob = {
     uploadTest?: DirectionTestDetails;
     downloadTest?: DirectionTestDetails;
 
+    fetchSmall?: FetchTestDetails;
+    fetchLarge?: FetchTestDetails;
+
     final?: {
       uploadMbps?: number;
       downloadMbps?: number;
+      realDownloadMbps?: number | null;
+      ping?: {
+        pingMs?: number | null;
+        jitterMs?: number | null;
+        packetLoss?: number | null;
+      };
       health?: HealthSnapshot;
       profileKey?: string;
       cpuLoad?: number | null;
       latencyMs?: number | null;
+      diagnosis?: DiagnosisDetails;
     };
 
     error?: string;
@@ -190,6 +222,19 @@ function protocolLabel(protocol?: SpeedProtocol | null) {
   if (protocol === "udp") return "UDP";
   if (protocol === "tcp") return "TCP";
   return "—";
+}
+
+function diagnosisLabel(value?: string | null) {
+  switch (value) {
+    case "PROTOCOL_SENSITIVE_OR_PACKET_LOSS":
+      return "Подозрение на packet loss / деградацию TCP";
+    case "LONG_FLOW_UNSTABLE":
+      return "Нестабильный длинный download-поток";
+    case "SHORT_FLOW_UNSTABLE":
+      return "Нестабильный short-flow download";
+    default:
+      return "—";
+  }
 }
 
 function jobStateLabel(job: RemoteSpeedJob | null) {
@@ -667,8 +712,14 @@ export default function RemoteSpeedPage() {
     job?.rawResult?.final?.uploadMbps ??
     null;
 
+  const displayRealDownload =
+    job?.rawResult?.final?.realDownloadMbps ??
+    job?.rawResult?.fetchSmall?.throughputMbps ??
+    null;
+
   const displayLatency =
     health?.latencyMs ??
+    job?.rawResult?.final?.ping?.pingMs ??
     result?.pingMs ??
     null;
 
@@ -701,7 +752,7 @@ export default function RemoteSpeedPage() {
             RemoteSpeed
           </div>
           <div className="mt-1 text-xs text-slate-400">
-            Удалённая проверка устройства через MikroTik health-check + dual bandwidth-test
+            Удалённая проверка устройства через health-check + synthetic speed-test + real download fetch
           </div>
         </div>
 
@@ -877,8 +928,7 @@ export default function RemoteSpeedPage() {
                 </div>
               ) : (
                 <div className="text-xs text-slate-500">
-                  Проверка выполняется на MikroTik: health-check + dual bandwidth-test
-                  (upload → download).
+                  Проверка выполняется на MikroTik: health-check + upload/download bandwidth-test + fetch download.
                 </div>
               )}
             </div>
@@ -904,7 +954,7 @@ export default function RemoteSpeedPage() {
 
             <Separator className="my-4 bg-slate-800" />
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <MetricTile
                 title="Загрузка"
                 value={formatMbps(displayDownload)}
@@ -918,10 +968,16 @@ export default function RemoteSpeedPage() {
                 tone="emerald"
               />
               <MetricTile
+                title="Real download"
+                value={formatMbps(displayRealDownload)}
+                unit={displayRealDownload != null ? "Мбит/с" : ""}
+                tone="amber"
+              />
+              <MetricTile
                 title="Latency"
                 value={formatMs(displayLatency)}
                 unit={displayLatency != null ? "мс" : ""}
-                tone="amber"
+                tone="slate"
               />
             </div>
 
@@ -1056,6 +1112,82 @@ export default function RemoteSpeedPage() {
                   </InfoTile>
                 </div>
 
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <InfoTile
+                    icon={<Activity className="h-4 w-4 text-slate-400" />}
+                    title="Fetch small"
+                  >
+                    <div className="grid gap-2 text-sm text-slate-100">
+                      <div className="break-all">URL: {job?.rawResult?.fetchSmall?.url ?? "—"}</div>
+                      <div>
+                        Throughput:{" "}
+                        {job?.rawResult?.fetchSmall?.throughputMbps != null
+                          ? `${job.rawResult.fetchSmall.throughputMbps} Мбит/с`
+                          : "—"}
+                      </div>
+                      <div>
+                        Duration:{" "}
+                        {job?.rawResult?.fetchSmall?.durationSec != null
+                          ? `${job.rawResult.fetchSmall.durationSec} сек`
+                          : "—"}
+                      </div>
+                      <div>
+                        Timeout: {job?.rawResult?.fetchSmall?.timedOut ? "Да" : "Нет"}
+                      </div>
+                    </div>
+                  </InfoTile>
+
+                  <InfoTile
+                    icon={<Clock3 className="h-4 w-4 text-slate-400" />}
+                    title="Fetch large"
+                  >
+                    <div className="grid gap-2 text-sm text-slate-100">
+                      <div className="break-all">URL: {job?.rawResult?.fetchLarge?.url ?? "—"}</div>
+                      <div>
+                        Throughput:{" "}
+                        {job?.rawResult?.fetchLarge?.throughputMbps != null
+                          ? `${job.rawResult.fetchLarge.throughputMbps} Мбит/с`
+                          : "—"}
+                      </div>
+                      <div>
+                        Duration:{" "}
+                        {job?.rawResult?.fetchLarge?.durationSec != null
+                          ? `${job.rawResult.fetchLarge.durationSec} сек`
+                          : "—"}
+                      </div>
+                      <div>
+                        Timeout: {job?.rawResult?.fetchLarge?.timedOut ? "Да" : "Нет"}
+                      </div>
+                    </div>
+                  </InfoTile>
+                </div>
+
+                <InfoTile
+                  icon={<AlertTriangle className="h-4 w-4 text-slate-400" />}
+                  title="Диагностика"
+                >
+                  <div className="grid gap-2 text-sm text-slate-100">
+                    <div>
+                      Причина:{" "}
+                      {diagnosisLabel(job?.rawResult?.final?.diagnosis?.suspectedCause)}
+                    </div>
+                    <div>
+                      Fetch small:{" "}
+                      {job?.rawResult?.final?.diagnosis?.fetchSmallMbps != null
+                        ? `${job.rawResult.final.diagnosis.fetchSmallMbps} Мбит/с`
+                        : "—"}
+                    </div>
+                    <div>
+                      Fetch large timeout:{" "}
+                      {job?.rawResult?.final?.diagnosis?.fetchLargeTimedOut == null
+                        ? "—"
+                        : job.rawResult.final.diagnosis.fetchLargeTimedOut
+                          ? "Да"
+                          : "Нет"}
+                    </div>
+                  </div>
+                </InfoTile>
+
                 {result ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
                     <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
@@ -1092,7 +1224,7 @@ export default function RemoteSpeedPage() {
               <div className="mt-5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-xs text-indigo-100">
                 <div className="inline-flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Воркер выполняет health-check, затем upload и download тесты по очереди.
+                  Воркер выполняет health-check, затем upload/download bandwidth-test и fetch download.
                 </div>
               </div>
             ) : null}

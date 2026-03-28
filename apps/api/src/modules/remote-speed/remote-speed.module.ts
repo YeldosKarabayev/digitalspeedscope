@@ -7,6 +7,7 @@ import { RemoteSpeedWorker } from "./remote-speed.worker";
 import { RemotePingRunner } from "./remote-ping.runner";
 import { RemoteTrafficRunner } from "./remote-traffic.runner";
 import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
+import { MikrotikFetchRunner } from "./mikrotik-fetch.runner";
 import { RemotePingController } from "./remote-ping.controller";
 import { RemoteHealthRunner } from "./remote-health.runner";
 
@@ -19,9 +20,9 @@ import { RemoteHealthRunner } from "./remote-health.runner";
     RemotePingRunner,
     RemoteTrafficRunner,
     MikrotikSpeedRunner,
+    MikrotikFetchRunner,
     RemoteHealthRunner,
   ],
   exports: [RemoteSpeedService],
 })
 export class RemoteSpeedModule {}
-

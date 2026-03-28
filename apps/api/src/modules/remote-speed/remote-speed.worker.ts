@@ -1,14 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Interval } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.module";
-import { RemotePingRunner } from "./remote-ping.runner";
 import {
   BandwidthTestError,
   MikrotikSpeedRunner,
 } from "./mikrotik-speed.runner";
-import { DSS_LIMITS, DSS_PROFILES } from "./remote-speed.constants";
+import { DSS_FETCH_URLS, DSS_LIMITS, DSS_PROFILES } from "./remote-speed.constants";
 import { MikrotikService } from "../mikrotik/mikrotik.service";
 import { RemoteHealthRunner } from "./remote-health.runner";
+import { MikrotikFetchRunner } from "./mikrotik-fetch.runner";
 
 type JobWithDevice = Awaited<
   ReturnType<PrismaService["remoteSpeedJob"]["findUnique"]>
@@ -72,6 +72,7 @@ export class RemoteSpeedWorker {
     private readonly prisma: PrismaService,
     private readonly healthRunner: RemoteHealthRunner,
     private readonly mikrotikSpeedRunner: MikrotikSpeedRunner,
+    private readonly mikrotikFetchRunner: MikrotikFetchRunner,
     private readonly mikrotik: MikrotikService,
   ) { }
 
@@ -184,8 +185,8 @@ export class RemoteSpeedWorker {
     const device: any = job?.device;
 
     const targetHost =
-      job.targetHost ??
-      device.btestTargetHost ??
+      job?.targetHost ??
+      device?.btestTargetHost ??
       process.env.CHR_BTEST_TARGET ??
       process.env.CHR_HOST;
 
@@ -316,13 +317,59 @@ export class RemoteSpeedWorker {
         durationSec: params.durationSec,
         protocol: params.protocol,
         raw: speed.raw ?? null,
+        command: (speed as any).command ?? null,
         localCpuLoad: speed.localCpuLoad ?? null,
         remoteCpuLoad: speed.remoteCpuLoad ?? null,
         connectionCount: speed.connectionCount ?? null,
+        uploadMbps: speed.uploadMbps ?? null,
+        downloadMbps: speed.downloadMbps ?? null,
       },
     });
 
     return speed;
+  }
+
+  private async runFetchDownload(
+    jobId: string,
+    sshConn: {
+      host: string;
+      port: number;
+      username: string;
+      password: string;
+      timeoutMs: number;
+    },
+    params: {
+      label: "fetchSmall" | "fetchLarge";
+      url: string;
+      progress: number;
+      message: string;
+    },
+  ) {
+    await this.setPhase(jobId, "RUNNING", params.progress, params.message);
+
+    const result = await withTimeout(
+      this.mikrotikFetchRunner.runFetchTest(sshConn, {
+        url: params.url,
+        keepResult: false,
+      }),
+      180_000,
+      `Fetch timeout for ${params.label}`,
+    );
+
+    await this.mergeRawResult(jobId, {
+      [params.label]: {
+        url: result.url,
+        durationSec: result.durationSec,
+        bytesDownloaded: result.bytesDownloaded,
+        throughputMbps: result.throughputMbps,
+        timedOut: result.timedOut,
+        success: result.success,
+        raw: result.raw,
+        command: result.command,
+      },
+    });
+
+    return result;
   }
 
   async process(jobId: string) {
@@ -344,8 +391,10 @@ export class RemoteSpeedWorker {
         throw new Error("Device has no mikrotikHost");
       }
 
-      const apiPassword = device.mikrotikSecretRef ?? process.env.MIKROTIK_PASSWORD;
-      const sshPassword = device.mikrotikSecretRef ?? process.env.MIKROTIK_PASSWORD;
+      const apiPassword =
+        device.mikrotikSecretRef ?? process.env.MIKROTIK_PASSWORD;
+      const sshPassword =
+        device.mikrotikSecretRef ?? process.env.MIKROTIK_PASSWORD;
 
       if (!apiPassword || !sshPassword) {
         throw new Error("MikroTik credentials are not configured");
@@ -364,7 +413,7 @@ export class RemoteSpeedWorker {
         port: 22,
         username: device.mikrotikUsername ?? "admin",
         password: sshPassword,
-        timeoutMs: 30_000,
+        timeoutMs: 60_000,
       };
 
       const targetHost =
@@ -374,7 +423,6 @@ export class RemoteSpeedWorker {
         "10.10.0.3";
 
       const durationSec = Math.min(job.durationSec ?? profile.durationSec, 15);
-      const protocol = (job.protocol as "tcp" | "udp") ?? profile.protocol;
 
       await this.setPhase(jobId, "HEALTH_CHECK", 15, "Running device health-check");
 
@@ -439,7 +487,6 @@ export class RemoteSpeedWorker {
         throw new Error(`Device CPU too high under load: ${healthUnderLoad.cpuLoad}%`);
       }
 
-      // Даём очереди и туннелю стабилизироваться
       await sleep(2000);
 
       const useBtestAuth = process.env.MIKROTIK_BTEST_AUTH === "true";
@@ -457,7 +504,6 @@ export class RemoteSpeedWorker {
         }
         : {};
 
-      // 1. Upload: transmit
       const uploadTest = await this.runOneDirection(job, sshConn, {
         label: "upload",
         direction: "transmit",
@@ -485,7 +531,35 @@ export class RemoteSpeedWorker {
         ...authPart,
       });
 
-      await this.setPhase(jobId, "QUEUE_DETACH", 85, "Detaching CHR queue");
+      const fetchSmall = await this.runFetchDownload(jobId, sshConn, {
+        label: "fetchSmall",
+        url: DSS_FETCH_URLS.small,
+        progress: 82,
+        message: "Running fetch small test",
+      });
+
+      let fetchLarge: {
+        url: string;
+        durationSec: number;
+        bytesDownloaded: number | null;
+        throughputMbps: number | null;
+        timedOut: boolean;
+        success: boolean;
+        raw: string;
+        command: string;
+      } | null = null;
+
+
+      if (fetchSmall.success && (fetchSmall.throughputMbps ?? 0) > 0.5) {
+        fetchLarge = await this.runFetchDownload(jobId, sshConn, {
+          label: "fetchLarge",
+          url: DSS_FETCH_URLS.large,
+          progress: 86,
+          message: "Running fetch large test",
+        });
+      }
+
+      await this.setPhase(jobId, "QUEUE_DETACH", 88, "Detaching CHR queue");
 
       await this.detachQueue(jobId);
       queueAttached = false;
@@ -503,6 +577,29 @@ export class RemoteSpeedWorker {
         downloadTest.uploadMbps ??
         0,
       );
+
+      const realDownloadMbps =
+        fetchSmall?.throughputMbps != null
+          ? Math.round(fetchSmall.throughputMbps * 100) / 100
+          : null;
+
+      let suspectedCause: string | null = null;
+
+      if (
+        downloadMbps > 0 &&
+        realDownloadMbps != null &&
+        realDownloadMbps > downloadMbps * 2
+      ) {
+        suspectedCause = "PROTOCOL_SENSITIVE_OR_PACKET_LOSS";
+      }
+
+      if (fetchLarge?.timedOut) {
+        suspectedCause = "LONG_FLOW_UNSTABLE";
+      }
+
+      if ((fetchSmall?.timedOut ?? false) && !fetchLarge) {
+        suspectedCause = "SHORT_FLOW_UNSTABLE";
+      }
 
       const measurement = await this.prisma.measurement.create({
         data: {
@@ -543,13 +640,21 @@ export class RemoteSpeedWorker {
             final: {
               uploadMbps,
               downloadMbps,
+              realDownloadMbps,
               ping: {
                 pingMs: health.latencyMs,
                 jitterMs: null,
                 packetLoss: 0,
               },
               profileKey,
-            }
+              diagnosis: {
+                suspectedCause,
+                fetchSmallMbps: fetchSmall?.throughputMbps ?? null,
+                fetchSmallTimedOut: fetchSmall?.timedOut ?? null,
+                fetchLargeMbps: fetchLarge?.throughputMbps ?? null,
+                fetchLargeTimedOut: fetchLarge?.timedOut ?? null,
+              },
+            },
           } as any,
         } as any,
       });
@@ -569,6 +674,16 @@ export class RemoteSpeedWorker {
         }
       }
 
+      const current = await this.prisma.remoteSpeedJob.findUnique({
+        where: { id: jobId },
+        select: { rawResult: true },
+      });
+
+      const rawResult =
+        current?.rawResult && typeof current.rawResult === "object"
+          ? (current.rawResult as Record<string, unknown>)
+          : {};
+
       await this.prisma.remoteSpeedJob.update({
         where: { id: jobId },
         data: {
@@ -576,13 +691,14 @@ export class RemoteSpeedWorker {
           phase: "FAILED",
           message: "Remote speed job failed",
           errorMessage: e?.message ?? "Unknown error",
-          rawResult:
-            e instanceof BandwidthTestError
+          rawResult: {
+            ...rawResult,
+            ...(e instanceof BandwidthTestError
               ? { raw: e.raw ?? null }
-              : {
-                requestedProfile: profileKey,
-                error: e?.message ?? "Unknown error",
-              },
+              : {}),
+            requestedProfile: profileKey,
+            error: e?.message ?? "Unknown error",
+          } as any,
         } as any,
       });
     }

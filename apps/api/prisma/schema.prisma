@@ -313,3 +313,24 @@ model RemoteSpeedJob {
   @@index([deviceId, createdAt])
   @@index([status])
 }
+
+model Alert {
+  id        String   @id @default(cuid())
+  type      String
+  severity  String   // INFO | WARNING | ERROR
+  message   String
+  isRead    Boolean  @default(false)
+
+  pointId   String?
+  point     Point?   @relation(fields: [pointId], references: [id])
+
+  meta      Json?
+
+  createdAt DateTime @default(now())
+  readAt    DateTime?
+
+  @@index([createdAt])
+  @@index([isRead, createdAt])
+  @@index([severity, createdAt])
+  @@index([pointId, createdAt])
+}

@@ -20,3 +20,8 @@ export const DSS_PROFILES = {
     protocol: "udp" as const,
   },
 };
+
+export const DSS_FETCH_URLS = {
+  small: process.env.DSS_FETCH_SMALL_URL ?? "http://194.32.141.218/dss/10MB.bin",
+  large: process.env.DSS_FETCH_LARGE_URL ?? "http://194.32.141.218/dss/100MB.bin",
+};

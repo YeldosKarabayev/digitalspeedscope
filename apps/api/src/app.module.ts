@@ -12,6 +12,7 @@ import { DevicesModule } from "./modules/devices/devices.module";
 import { MikrotikModule } from "./modules/mikrotik/mikrotik.module";
 import { RemoteSpeedModule } from "./modules/remote-speed/remote-speed.module";
 import { TestController } from "./test.controller";
+import { ReportsModule } from "./modules/reports/reports.module";
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { TestController } from "./test.controller";
     MapModule,
     MeasurementsModule,
     PortalModule,
+    ReportsModule,
   ],
   controllers: [TestController],
 })
