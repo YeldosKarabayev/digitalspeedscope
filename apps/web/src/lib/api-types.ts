@@ -5,6 +5,7 @@ export type DashboardOverviewResponse = {
   totalDevices: number;
   activeDevices24h: number;
   avgDownloadMbps: number;
+  avgRealDownloadMbps: number | null;
   avgUploadMbps: number;
   avgPingMs: number;
   incidents: number;
@@ -35,6 +36,7 @@ export type MapPointsResponse = {
     lat: number;
     lng: number;
     download: number;
+    realDownload: number | null;
     upload: number;
     ping: number;
     isp?: string;

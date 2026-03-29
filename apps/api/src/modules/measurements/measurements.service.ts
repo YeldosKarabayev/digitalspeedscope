@@ -69,7 +69,6 @@ export class MeasurementsService {
     if (q.deviceUid) where.device = { uid: q.deviceUid };
 
     if (q.city && q.city !== "Все города") {
-      // фильтр по городу через point.city
       where.point = { city: { name: q.city } };
     }
 
@@ -106,6 +105,7 @@ export class MeasurementsService {
         ts: m.createdAt.toISOString(),
         status: m.status,
         download: m.downloadMbps,
+        realDownload: m.realDownloadMbps ?? null,
         upload: m.uploadMbps,
         ping: m.pingMs,
         deviceUid: m.device.uid,

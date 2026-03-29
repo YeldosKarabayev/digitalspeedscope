@@ -33,7 +33,6 @@ function pad2(n: number) {
 function labelFor(range: RangeKey, d: Date) {
   if (range === "1h") return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   if (range === "24h") return `${pad2(d.getHours())}:00`;
-  // 7d/30d — по дате
   return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}`;
 }
 
@@ -45,29 +44,61 @@ export class DashboardService {
   async overview(range: RangeKey) {
     const since = rangeToSince(range);
 
-    const [totalDevices, activeDevices24h, agg, incidents] = await Promise.all([
-      this.prisma.device.count(),
-      // "active" = есть хотя бы одно измерение в периоде
-      this.prisma.device.count({
-        where: { measurements: { some: { createdAt: { gte: since } } } },
-      }),
-      this.prisma.measurement.aggregate({
-        where: { createdAt: { gte: since } },
-        _avg: { downloadMbps: true, uploadMbps: true, pingMs: true },
-      }),
-      // incidents: для MVP считаем POOR (строго аварии)
-      this.prisma.measurement.count({
-        where: { createdAt: { gte: since }, status: "POOR" },
-      }),
-    ]);
+    const [totalDevices, activeDevices24h, aggReal, aggFallback, incidents] =
+      await Promise.all([
+        this.prisma.device.count(),
+        this.prisma.device.count({
+          where: { measurements: { some: { createdAt: { gte: since } } } },
+        }),
+        this.prisma.measurement.aggregate({
+          where: {
+            createdAt: { gte: since },
+            realDownloadMbps: { not: null },
+          },
+          _avg: {
+            realDownloadMbps: true,
+            uploadMbps: true,
+            pingMs: true,
+          },
+        }),
+        this.prisma.measurement.aggregate({
+          where: { createdAt: { gte: since } },
+          _avg: {
+            downloadMbps: true,
+            uploadMbps: true,
+            pingMs: true,
+          },
+        }),
+        this.prisma.measurement.count({
+          where: { createdAt: { gte: since }, status: "POOR" },
+        }),
+      ]);
+
+    const avgDownloadMbps = Math.round(
+      aggReal._avg.realDownloadMbps ??
+        aggFallback._avg.downloadMbps ??
+        0,
+    );
+
+    const avgUploadMbps = Math.round(
+      aggReal._avg.uploadMbps ??
+        aggFallback._avg.uploadMbps ??
+        0,
+    );
+
+    const avgPingMs = Math.round(
+      aggReal._avg.pingMs ??
+        aggFallback._avg.pingMs ??
+        0,
+    );
 
     return {
       range,
       totalDevices,
       activeDevices24h,
-      avgDownloadMbps: Math.round(agg._avg.downloadMbps ?? 0),
-      avgUploadMbps: Math.round(agg._avg.uploadMbps ?? 0),
-      avgPingMs: Math.round(agg._avg.pingMs ?? 0),
+      avgDownloadMbps,
+      avgUploadMbps,
+      avgPingMs,
       incidents,
     };
   }
@@ -77,29 +108,31 @@ export class DashboardService {
     const since = rangeToSince(range);
     const cfg = trendCfg(range);
 
-    // Собираем измерения за период (MVP: вытягиваем нужные поля)
-    // Для seed’а это ок. Для прод — можно оптимизировать raw SQL’ом под bucket.
     const rows = await this.prisma.measurement.findMany({
       where: { createdAt: { gte: since } },
-      select: { createdAt: true, downloadMbps: true, uploadMbps: true, pingMs: true },
+      select: {
+        createdAt: true,
+        downloadMbps: true,
+        realDownloadMbps: true,
+        uploadMbps: true,
+        pingMs: true,
+      },
       orderBy: { createdAt: "asc" },
     });
 
     const now = new Date();
     const stepMs = cfg.stepMin * 60_000;
 
-    // Готовим buckets справа-налево (как в твоём мок-генераторе)
     const buckets = Array.from({ length: cfg.count }, (_, idx) => {
-      const i = cfg.count - 1 - idx; // i: cfg.count-1 ... 0
+      const i = cfg.count - 1 - idx;
       const start = new Date(now.getTime() - i * stepMs);
-      // округлим "старт" для красоты лейблов (особенно для 24h/7d/30d)
       const rounded = new Date(start);
 
       if (range === "24h") {
         rounded.setMinutes(0, 0, 0);
       } else if (range === "7d" || range === "30d") {
         rounded.setHours(0, 0, 0, 0);
-      } // для 1h оставляем минуты
+      }
 
       return {
         ts: rounded,
@@ -112,29 +145,22 @@ export class DashboardService {
       };
     });
 
-    // Раскидываем измерения по buckets
     let b = 0;
     for (const r of rows) {
       const t = r.createdAt.getTime();
 
-      // двигаем указатель bucket, пока endMs <= t
       while (b < buckets.length && t >= buckets[b].endMs) b++;
 
-      // проверяем попадание в текущий bucket
       const cur = buckets[b];
       if (!cur) continue;
       if (t >= cur.startMs && t < cur.endMs) {
-        cur.sumDl += r.downloadMbps;
+        cur.sumDl += r.realDownloadMbps ?? r.downloadMbps;
         cur.sumUl += r.uploadMbps;
         cur.sumPg += r.pingMs;
         cur.n += 1;
       }
     }
 
-    // Если bucket пустой — можно:
-    // A) ставить 0
-    // B) тянуть предыдущее значение (лучше визуально)
-    // Для MVP: carry-forward (если есть предыдущие)
     let lastDl = 0,
       lastUl = 0,
       lastPg = 0;

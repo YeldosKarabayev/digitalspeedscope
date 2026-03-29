@@ -284,10 +284,10 @@ function Sidebar({
             {!collapsed && (
               <>
                 <div className="mt-6 px-1">
-                  <div className="text-xs font-medium text-slate-400">Быстрые действия</div>
+                  {/* <div className="text-xs font-medium text-slate-400">Быстрые действия</div> */}
                 </div>
                 <div className="mt-2 grid gap-2">
-                  <Button className="w-full justify-start gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500">
+                  {/* <Button className="w-full justify-start gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500">
                     <Plus className="h-4 w-4" /> Добавить устройство
                   </Button>
                   <Button
@@ -296,7 +296,7 @@ function Sidebar({
                     onClick={() => router.push("/speedtest")}
                   >
                     <Gauge className="h-4 w-4" /> Запустить тест
-                  </Button>
+                  </Button> */}
 
                 </div>
               </>
@@ -402,9 +402,9 @@ function Topbar({ title, subtitle }: { title?: string; subtitle?: string }) {
             </DropdownMenu>
 
             {/* Primary action */}
-            <Button className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500">
+            {/* <Button className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500">
               Добавить устройство
-            </Button>
+            </Button> */}
             <Button
               variant="secondary"
               className="h-10 rounded-xl bg-slate-900/40 text-slate-100 hover:bg-slate-900"
