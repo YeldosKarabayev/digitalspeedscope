@@ -336,3 +336,16 @@ model Alert {
   @@index([severity, createdAt])
   @@index([pointId, createdAt])
 }
+
+model SmsTopupRequest {
+  id          String   @id @default(cuid())
+  amount      Decimal  @db.Decimal(12, 2)
+  currency    String   @default("KZT")
+  status      String   @default("PENDING") // PENDING, COMPLETED, CANCELED
+  comment     String?
+
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([status, createdAt])
+}

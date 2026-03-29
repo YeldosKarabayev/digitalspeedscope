@@ -5,7 +5,8 @@ import { VerifyCodeDto } from "./dto/verify-code.dto";
 
 @Controller("portal")
 export class PortalController {
-  constructor(private readonly service: PortalService) {}
+  smsService: any;
+  constructor(private readonly service: PortalService) { }
 
   @Post("request-code")
   request(@Body() dto: RequestCodeDto, @Req() req: any) {
@@ -21,6 +22,11 @@ export class PortalController {
       ip: req.ip,
       ua: req.headers["user-agent"],
     });
+  }
+
+  @Get("balance")
+  getBalance() {
+    return this.smsService.getBalance();
   }
 
   @Get("me")

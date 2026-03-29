@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Search,
   Plus,
+  MessagesSquare,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -58,6 +59,7 @@ const NAV: NavItem[] = [
   { label: "Устройства", href: "/devices", icon: Router },
   { label: "SpeedTest", href: "/speedtest", icon: Gauge },
   { label: "Отчёты", href: "/reports", icon: FileText },
+  { label: "SMS", href: "/sms", icon: MessagesSquare },
   { label: "Оповещения", href: "/alerts", icon: Bell, badge: "0" },
   { label: "Инструменты", href: "/tools", icon: Wrench },
   { label: "Настройки", href: "/settings", icon: Settings },
