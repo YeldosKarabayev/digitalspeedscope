@@ -56,11 +56,23 @@ export default function SmsPage() {
     const [amount, setAmount] = React.useState("");
     const [topupLoading, setTopupLoading] = React.useState(false);
 
+    const [points, setPoints] = React.useState<{ id: string; name: string }[]>([]);
+
     const [summary, setSummary] = React.useState({
         total: 0,
         sent: 0,
         failed: 0,
     });
+
+    async function loadPoints() {
+        try {
+            const res = await fetch(`${API_URL}/portal/points`);
+            const data = await res.json();
+            setPoints(data ?? []);
+        } catch (e) {
+            console.error(e);
+        }
+    }
 
     async function loadBalance() {
         setBalanceLoading(true);
@@ -165,6 +177,7 @@ export default function SmsPage() {
         loadBalance();
         loadSmsLog();
         loadTopups();
+        loadPoints();
     }, []);
 
     function exportCsv() {
@@ -334,12 +347,23 @@ export default function SmsPage() {
                             value={phone}
                             onChange={setPhone}
                         />
-                        <Field
-                            icon={<MapPin className="h-4 w-4" />}
-                            placeholder="ID точки"
-                            value={pointId}
-                            onChange={setPointId}
-                        />
+                        <div className="flex h-11 items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 px-3">
+                            <MapPin className="h-4 w-4 text-slate-500" />
+
+                            <select
+                                value={pointId}
+                                onChange={(e) => setPointId(e.target.value)}
+                                className="w-full bg-transparent text-sm text-white outline-none"
+                            >
+                                <option value="">Все точки</option>
+
+                                {points.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <DateField label="Дата от" value={from} onChange={setFrom} />
                         <DateField label="Дата до" value={to} onChange={setTo} />
 

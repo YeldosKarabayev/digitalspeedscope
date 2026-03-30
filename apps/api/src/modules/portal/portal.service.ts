@@ -33,7 +33,12 @@ export class PortalService {
     private readonly mikrotikService: MikrotikService,
   ) { }
 
-  async me(params: { deviceKey: string; pointId: string; clientMac?: string }) {
+  async me(params: {
+    deviceKey: string;
+    pointId: string;
+    clientMac?: string;
+    clientIp?: string;
+  }) {
     if (!params.deviceKey || !params.pointId) {
       return { ok: false };
     }
@@ -57,9 +62,25 @@ export class PortalService {
       return { ok: false };
     }
 
+    // Автоматически даём доступ в MikroTik заново на текущий IP/MAC
+    if (params.clientIp) {
+      await this.mikrotikService.authorizeClient({
+        pointId: params.pointId,
+        clientIp: params.clientIp,
+        clientMac: params.clientMac ?? access.clientMac ?? undefined,
+        phone: access.identity.phone,
+        ttlSeconds: ACCESS_TTL_SEC,
+      });
+    }
+
     await this.prisma.portalAccess.update({
       where: { id: access.id },
-      data: { lastSeenAt: new Date() },
+      data: {
+        lastSeenAt: new Date(),
+        clientIp: params.clientIp ?? access.clientIp,
+        clientMac: params.clientMac ?? access.clientMac,
+        expiresAt: new Date(Date.now() + ACCESS_TTL_SEC * 1000),
+      },
     });
 
     return {

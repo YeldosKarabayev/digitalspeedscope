@@ -68,7 +68,7 @@ function extractPortalParams() {
       params.get("continueUrl") ??
       params.get("link-orig") ??
       params.get("linkOrig") ??
-      "https://digitalspeedscope.kz",
+      "https://example.com",
   };
 }
 
@@ -77,12 +77,12 @@ async function readError(res: Response, fallback: string) {
     const data = await res.json();
     if (typeof data?.message === "string") return data.message;
     if (Array.isArray(data?.message)) return data.message.join(", ");
-  } catch {}
+  } catch { }
 
   try {
     const text = await res.text();
     if (text) return text;
-  } catch {}
+  } catch { }
 
   return fallback;
 }
@@ -104,7 +104,7 @@ export default function PortalScreen() {
   const [pointId, setPointId] = React.useState("");
   const [clientIp, setClientIp] = React.useState("");
   const [clientMac, setClientMac] = React.useState("");
-  const [continueUrl, setContinueUrl] = React.useState("https://digitalspeedscope.kz");
+  const [continueUrl, setContinueUrl] = React.useState("https://example.com");
 
   React.useEffect(() => {
     const portal = extractPortalParams();
@@ -126,6 +126,7 @@ export default function PortalScreen() {
         });
 
         if (clientMac) qs.set("clientMac", clientMac);
+        if (clientIp) qs.set("clientIp", clientIp);
 
         const res = await fetch(`${API_URL}/portal/me?${qs.toString()}`, {
           cache: "no-store",
@@ -135,7 +136,7 @@ export default function PortalScreen() {
 
         const json = await res.json();
         if (json?.ok) setStep("success");
-      } catch {}
+      } catch { }
     })();
   }, [deviceKey, pointId, clientMac]);
 
@@ -147,6 +148,20 @@ export default function PortalScreen() {
 
     return () => window.clearInterval(t);
   }, [expiresIn]);
+
+  React.useEffect(() => {
+    if (step !== "success") return;
+
+    const t = window.setTimeout(() => {
+      try {
+        window.close();
+      } catch { }
+
+      window.location.replace(continueUrl || "https://example.com");
+    }, 1500);
+
+    return () => window.clearTimeout(t);
+  }, [step, continueUrl]);
 
   function getOrCreateDeviceKey() {
     const name = "dss_device=";
@@ -427,7 +442,11 @@ export default function PortalScreen() {
               <Button
                 className="h-11 w-full rounded-xl bg-indigo-600 hover:bg-indigo-500"
                 onClick={() => {
-                  window.location.href = continueUrl;
+                  try {
+                    window.close();
+                  } catch { }
+
+                  window.location.replace(continueUrl || "https://example.com");
                 }}
               >
                 Продолжить

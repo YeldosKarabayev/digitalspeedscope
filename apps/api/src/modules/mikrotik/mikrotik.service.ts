@@ -30,12 +30,12 @@ type AddSimpleQueueParams = {
 @Injectable()
 export class MikrotikService {
   exec(arg0: { host: string; command: string; }) {
-      throw new Error("Method not implemented.");
+    throw new Error("Method not implemented.");
   }
   constructor(
     private readonly prisma: PrismaService,
     private readonly mikrotikApiService: MikrotikApiService,
-  ) {}
+  ) { }
 
   async execWords(params: ExecWordsParams) {
     const host = params.host?.trim();
@@ -167,30 +167,99 @@ export class MikrotikService {
       throw new InternalServerErrorException("У устройства не указан mikrotikSecretRef");
     }
 
-    if (!params.clientIp && !params.clientMac) {
-      throw new BadRequestException("Нет clientIp или clientMac для авторизации");
+    if (!params.clientIp) {
+      throw new BadRequestException("Нет clientIp для авторизации");
     }
 
-    const password = point.device.mikrotikSecretRef;
-    const listName = "portal_allowed";
+    if (!params.clientMac) {
+      throw new BadRequestException("Нет clientMac для авторизации");
+    }
 
-    if (params.clientIp) {
+    const host = point.device.mikrotikHost;
+    const port = point.device.mikrotikPort ?? 8728;
+    const username = point.device.mikrotikUsername;
+    const password = point.device.mikrotikSecretRef;
+
+    // 1. удалить старые ip-binding по IP
+    const byIp = await this.mikrotikApiService.exec(
+      {
+        host,
+        port,
+        username,
+        password,
+      },
+      [
+        "/ip/hotspot/ip-binding/print",
+        `=?address=${params.clientIp}`,
+      ],
+    );
+
+    for (const row of byIp ?? []) {
+      const id = row?.[".id"];
+      if (!id) continue;
+
       await this.mikrotikApiService.exec(
         {
-          host: point.device.mikrotikHost,
-          port: point.device.mikrotikPort ?? 8728,
-          username: point.device.mikrotikUsername,
+          host,
+          port,
+          username,
           password,
         },
         [
-          "/ip/firewall/address-list/add",
-          `=list=${listName}`,
-          `=address=${params.clientIp}`,
-          `=comment=portal:${params.phone}:${params.clientMac ?? "no-mac"}`,
-          `=timeout=${params.ttlSeconds}s`,
+          "/ip/hotspot/ip-binding/remove",
+          `=.id=${id}`,
         ],
       );
     }
+
+    // 2. удалить старые ip-binding по MAC
+    const byMac = await this.mikrotikApiService.exec(
+      {
+        host,
+        port,
+        username,
+        password,
+      },
+      [
+        "/ip/hotspot/ip-binding/print",
+        `=?mac-address=${params.clientMac}`,
+      ],
+    );
+
+    for (const row of byMac ?? []) {
+      const id = row?.[".id"];
+      if (!id) continue;
+
+      await this.mikrotikApiService.exec(
+        {
+          host,
+          port,
+          username,
+          password,
+        },
+        [
+          "/ip/hotspot/ip-binding/remove",
+          `=.id=${id}`,
+        ],
+      );
+    }
+
+    // 3. добавить bypass для HotSpot
+    await this.mikrotikApiService.exec(
+      {
+        host,
+        port,
+        username,
+        password,
+      },
+      [
+        "/ip/hotspot/ip-binding/add",
+        `=address=${params.clientIp}`,
+        `=mac-address=${params.clientMac}`,
+        "=type=bypassed",
+        `=comment=portal:${params.phone}`,
+      ],
+    );
 
     return {
       ok: true,

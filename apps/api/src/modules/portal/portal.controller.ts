@@ -6,7 +6,8 @@ import { VerifyCodeDto } from "./dto/verify-code.dto";
 @Controller("portal")
 export class PortalController {
   smsService: any;
-  constructor(private readonly service: PortalService) { }
+  service: any;
+  constructor(private readonly portalService: PortalService) { }
 
   @Post("request-code")
   request(@Body() dto: RequestCodeDto, @Req() req: any) {
@@ -14,6 +15,11 @@ export class PortalController {
       ip: req.ip,
       ua: req.headers["user-agent"],
     });
+  }
+
+  @Get("points")
+  getPoints() {
+    return this.portalService.getPoints();
   }
 
   @Post("verify-code")
@@ -34,7 +40,13 @@ export class PortalController {
     @Query("deviceKey") deviceKey: string,
     @Query("pointId") pointId: string,
     @Query("clientMac") clientMac?: string,
+    @Query("clientIp") clientIp?: string,
   ) {
-    return this.service.me({ deviceKey, pointId, clientMac });
+    return this.service.me({
+      deviceKey,
+      pointId,
+      clientMac,
+      clientIp,
+    });
   }
 }
