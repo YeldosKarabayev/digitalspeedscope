@@ -89,6 +89,8 @@ export class PortalService {
       where: {
         phone: dto.phone,
         pointId: dto.pointId,
+        verifiedAt: null,
+        expiresAt: { gt: new Date() },
         createdAt: {
           gt: new Date(Date.now() - RESEND_COOLDOWN_SEC * 1000),
         },
@@ -110,6 +112,10 @@ export class PortalService {
 
     const expiresAt = new Date(Date.now() + OTP_TTL_SEC * 1000);
 
+    // Сначала пробуем отправить SMS
+    const smsResult = await this.smsService.sendOtp(dto.phone, code);
+
+    // Только если SMS ушла успешно — сохраняем session
     await this.prisma.portalSession.create({
       data: {
         phone: dto.phone,
@@ -122,8 +128,6 @@ export class PortalService {
         userAgent: meta.ua,
       },
     });
-
-    const smsResult = await this.smsService.sendOtp(dto.phone, code);
 
     await this.logEvent({
       pointId: dto.pointId,
@@ -269,6 +273,16 @@ export class PortalService {
       expiresInSec: ACCESS_TTL_SEC,
       pointId: dto.pointId,
     };
+  }
+
+  async getPoints() {
+    return this.prisma.point.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: { name: "asc" },
+    });
   }
 
   private async logEvent(params: {
