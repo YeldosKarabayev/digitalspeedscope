@@ -10,9 +10,10 @@ import { MikrotikSpeedRunner } from "./mikrotik-speed.runner";
 import { MikrotikFetchRunner } from "./mikrotik-fetch.runner";
 import { RemotePingController } from "./remote-ping.controller";
 import { RemoteHealthRunner } from "./remote-health.runner";
+import { AlertsModule } from "../alerts/alerts.module";
 
 @Module({
-  imports: [PrismaModule, MikrotikModule],
+  imports: [PrismaModule, MikrotikModule, AlertsModule],
   controllers: [RemoteSpeedController, RemotePingController],
   providers: [
     RemoteSpeedService,

@@ -1,4 +1,3 @@
-
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "../../prisma/prisma.module";
 import { AlertsController } from "./alerts.controller";
