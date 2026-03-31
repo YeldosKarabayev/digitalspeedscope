@@ -349,3 +349,9 @@ model SmsTopupRequest {
 
   @@index([status, createdAt])
 }
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  ERROR
+}

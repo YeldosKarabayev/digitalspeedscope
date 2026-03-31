@@ -3,28 +3,25 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Activity,
-  AlertTriangle,
   ArrowLeft,
-  CheckCircle2,
-  Clock3,
-  Cpu,
-  Gauge,
   Loader2,
   RefreshCw,
-  Router as RouterIcon,
-  ShieldCheck,
-  TimerReset,
-  Waypoints,
   Wifi,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Gauge,
+  Timer,
+  Activity,
+  MapPin,
+  Router as RouterIcon,
+  Waypoints,
 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 
 type MeasurementStatus = "EXCELLENT" | "GOOD" | "FAIR" | "POOR";
 type RemoteSpeedJobStatus =
@@ -39,6 +36,7 @@ type SpeedProfile = "auto" | "lite50" | "std100" | "plus150";
 type RemoteMeasurement = {
   id: string;
   downloadMbps: number;
+  realDownloadMbps?: number | null;
   uploadMbps: number;
   pingMs: number | null;
   jitterMs?: number | null;
@@ -148,6 +146,18 @@ type RemoteSpeedJob = {
   measurement?: RemoteMeasurement | null;
 };
 
+type DeviceSummary = {
+  id: string;
+  uid?: string | null;
+  name?: string | null;
+  lastIp?: string | null;
+  queueTargetIp?: string | null;
+  point?: {
+    id: string;
+    name?: string | null;
+  } | null;
+};
+
 type RemoteSpeedCreateResponse = {
   ok: boolean;
   reused?: boolean;
@@ -169,211 +179,14 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
-function formatMbps(value?: number | null) {
+function formatMbps(value?: number | null, digits = 0) {
   if (value == null || !Number.isFinite(value)) return "—";
-  return `${Math.round(value)}`;
+  return digits > 0 ? value.toFixed(digits) : `${Math.round(value)}`;
 }
 
 function formatMs(value?: number | null) {
   if (value == null || !Number.isFinite(value)) return "—";
   return `${Math.round(value)}`;
-}
-
-function formatPercent(value?: number | null) {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return `${Math.round(value)}%`;
-}
-
-function formatTunnelState(value?: boolean | null) {
-  if (value === true) return "UP";
-  if (value === false) return "DOWN";
-  return "—";
-}
-
-function statusLabel(s: MeasurementStatus) {
-  if (s === "EXCELLENT") return "Отлично";
-  if (s === "GOOD") return "Хорошо";
-  if (s === "FAIR") return "Норм";
-  if (s === "POOR") return "Плохо";
-  return "Неизвестно";
-}
-
-function statusBadgeClass(s: MeasurementStatus) {
-  if (s === "EXCELLENT")
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-200";
-  if (s === "GOOD")
-    return "border-indigo-500/25 bg-indigo-500/10 text-indigo-200";
-  if (s === "FAIR")
-    return "border-amber-500/25 bg-amber-500/10 text-amber-200";
-  if (s === "POOR")
-    return "border-rose-500/25 bg-rose-500/10 text-rose-200";
-  return "border-slate-700 bg-slate-900/30 text-slate-300";
-}
-
-function profileLabel(profile?: string | null) {
-  if (profile === "lite50") return "lite50";
-  if (profile === "std100") return "std100";
-  if (profile === "plus150") return "plus150";
-  if (profile === "auto") return "auto";
-  return "—";
-}
-
-function protocolLabel(protocol?: SpeedProtocol | null) {
-  if (protocol === "udp") return "UDP";
-  if (protocol === "tcp") return "TCP";
-  return "—";
-}
-
-function diagnosisLabel(value?: string | null) {
-  switch (value) {
-    case "PROTOCOL_SENSITIVE_OR_PACKET_LOSS":
-      return "Подозрение на packet loss / деградацию TCP";
-    case "LONG_FLOW_UNSTABLE":
-      return "Нестабильный длинный download-поток";
-    case "SHORT_FLOW_UNSTABLE":
-      return "Нестабильный short-flow download";
-    default:
-      return "—";
-  }
-}
-
-function jobStateLabel(job: RemoteSpeedJob | null) {
-  if (!job) return "Ожидание";
-  if (job.status === "QUEUED") return "В очереди";
-  if (job.status === "RUNNING") return "Выполняется";
-  if (job.status === "SUCCEEDED") return "Завершено";
-  if (job.status === "TIMEOUT") return "Таймаут";
-  return "Ошибка";
-}
-
-function jobPhaseLabel(phase?: string | null) {
-  switch (phase) {
-    case "QUEUED":
-      return "В очереди";
-    case "PREPARING":
-      return "Подготовка";
-    case "HEALTH_CHECK":
-      return "Проверка устройства";
-    case "CHR_CHECK":
-      return "Проверка CHR";
-    case "QUEUE_ATTACH":
-      return "Подключение очереди";
-    case "RUNNING":
-      return "Тест скорости";
-    case "QUEUE_DETACH":
-      return "Снятие очереди";
-    case "COLLECTING":
-      return "Сохранение";
-    case "COOLING":
-      return "Стабилизация";
-    case "DONE":
-      return "Готово";
-    case "FAILED":
-      return "Ошибка";
-    default:
-      return "Ожидание";
-  }
-}
-
-function toneCard(
-  tone: "indigo" | "emerald" | "amber" | "slate" = "slate",
-) {
-  if (tone === "indigo") {
-    return "border-indigo-500/20 bg-indigo-500/10";
-  }
-  if (tone === "emerald") {
-    return "border-emerald-500/20 bg-emerald-500/10";
-  }
-  if (tone === "amber") {
-    return "border-amber-500/20 bg-amber-500/10";
-  }
-  return "border-slate-800 bg-slate-900/20";
-}
-
-function speedToGaugePercent(value: number, max: number) {
-  if (!Number.isFinite(value) || max <= 0) return 0;
-  return clamp((value / max) * 100, 0, 100);
-}
-
-function Field({
-  label,
-  children,
-  icon,
-}: {
-  label: string;
-  children: React.ReactNode;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-2">
-      <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-400">
-        {icon}
-        {label}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function InfoTile({
-  icon,
-  title,
-  children,
-}: {
-  icon?: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-      <div className="inline-flex items-center gap-2 text-xs font-medium text-slate-400">
-        {icon}
-        {title}
-      </div>
-      <div className="mt-2">{children}</div>
-    </div>
-  );
-}
-
-function MetricTile({
-  title,
-  value,
-  unit,
-  tone = "slate",
-}: {
-  title: string;
-  value: string;
-  unit?: string;
-  tone?: "indigo" | "emerald" | "amber" | "slate";
-}) {
-  return (
-    <div className={cn("rounded-2xl border p-4", toneCard(tone))}>
-      <div className="text-xs font-medium text-slate-400">{title}</div>
-      <div className="mt-2 flex items-end gap-2">
-        <div className="text-3xl font-semibold tracking-tight text-slate-50">
-          {value}
-        </div>
-        {unit ? <div className="pb-1 text-sm text-slate-400">{unit}</div> : null}
-      </div>
-    </div>
-  );
-}
-
-function MiniStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-3">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-medium text-slate-100">{value}</div>
-    </div>
-  );
 }
 
 function getPrimaryHealth(job: RemoteSpeedJob | null): HealthSnapshot | null {
@@ -385,171 +198,240 @@ function getPrimaryHealth(job: RemoteSpeedJob | null): HealthSnapshot | null {
   );
 }
 
-function GaugeMeter({
+function useAnimatedNumber(target: number, duration = 700) {
+  const [value, setValue] = React.useState(target);
+
+  React.useEffect(() => {
+    const start = performance.now();
+    const from = value;
+    const to = target;
+    let raf = 0;
+
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next = from + (to - from) * eased;
+      setValue(next);
+
+      if (progress < 1) {
+        raf = requestAnimationFrame(tick);
+      }
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+
+  return value;
+}
+
+function SpeedArc({
   value,
   max,
   label,
+  activeTone = "download",
   sublabel,
-  tone = "indigo",
-  loading = false,
+  loading,
 }: {
   value: number;
   max: number;
   label: string;
+  activeTone: "download" | "upload" | "idle";
   sublabel?: string;
-  tone?: "indigo" | "emerald" | "amber";
   loading?: boolean;
 }) {
-  const pct = speedToGaugePercent(value, max);
-  const radius = 86;
-  const stroke = 14;
-  const cx = 110;
-  const cy = 110;
-  const startAngle = 135;
-  const endAngle = 405;
-  const angle = startAngle + ((endAngle - startAngle) * pct) / 100;
+  const animatedValue = useAnimatedNumber(value, 500);
+  const pct = clamp(max > 0 ? animatedValue / max : 0, 0, 1);
 
-  const polar = (deg: number) => {
+  const size = 360;
+  const cx = 180;
+  const cy = 180;
+  const radius = 122;
+  const startAngle = 140;
+  const endAngle = 400;
+  const sweep = endAngle - startAngle;
+  const currentAngle = startAngle + sweep * pct;
+
+  const polar = (deg: number, r = radius) => {
     const rad = (deg * Math.PI) / 180;
     return {
-      x: cx + radius * Math.cos(rad),
-      y: cy + radius * Math.sin(rad),
+      x: cx + r * Math.cos(rad),
+      y: cy + r * Math.sin(rad),
     };
   };
 
-  const arcPath = (fromDeg: number, toDeg: number) => {
-    const start = polar(fromDeg);
-    const end = polar(toDeg);
-    const largeArc = toDeg - fromDeg > 180 ? 1 : 0;
+  const arcPath = (from: number, to: number) => {
+    const start = polar(from);
+    const end = polar(to);
+    const largeArc = to - from > 180 ? 1 : 0;
     return `M ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x} ${end.y}`;
   };
 
   const bgPath = arcPath(startAngle, endAngle);
-  const valPath = arcPath(startAngle, angle);
+  const fgPath = arcPath(startAngle, currentAngle);
+
+  const needleStart = polar(currentAngle, 28);
+  const needleEnd = polar(currentAngle, 95);
+
+  const ticks = [0, 5, 10, 50, 100, 250, 500, 750, 1000];
+  const tickMax = 1000;
 
   const toneClass =
-    tone === "emerald"
-      ? "text-emerald-400"
-      : tone === "amber"
-        ? "text-amber-400"
-        : "text-indigo-400";
+    activeTone === "upload"
+      ? "text-slate-200"
+      : activeTone === "download"
+        ? "text-indigo-300"
+        : "text-slate-300";
+
+  const arcStroke =
+    activeTone === "upload"
+      ? "url(#speedUpload)"
+      : activeTone === "download"
+        ? "url(#speedDownload)"
+        : "rgba(71,85,105,0.95)";
 
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4">
-      <div className="text-xs font-medium text-slate-400">{label}</div>
+    <div className="flex flex-col items-center">
+      <div className="relative h-[380px] w-[380px]">
+        <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full">
+          <defs>
+            <linearGradient id="speedDownload" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#6366f1" />
+              <stop offset="100%" stopColor="#a5b4fc" />
+            </linearGradient>
+            <linearGradient id="speedUpload" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#cbd5e1" />
+              <stop offset="100%" stopColor="#94a3b8" />
+            </linearGradient>
+            <radialGradient id="gaugeGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="rgba(99,102,241,0.12)" />
+              <stop offset="100%" stopColor="rgba(15,23,42,0)" />
+            </radialGradient>
+          </defs>
 
-      <div className="mt-2 flex items-center justify-center">
-        <div className="relative h-[220px] w-[220px]">
-          <svg viewBox="0 0 220 220" className="h-full w-full">
-            <path
-              d={bgPath}
-              fill="none"
-              stroke="rgb(51 65 85 / 0.55)"
-              strokeWidth={stroke}
-              strokeLinecap="round"
-            />
-            <path
-              d={valPath}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              className={cn("transition-all duration-500", toneClass)}
-            />
-          </svg>
+          <circle cx={cx} cy={cy} r={145} fill="url(#gaugeGlow)" />
 
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {loading ? (
-              <Loader2 className="mb-2 h-6 w-6 animate-spin text-slate-300" />
-            ) : (
-              <Gauge className="mb-2 h-6 w-6 text-slate-400" />
-            )}
+          <path
+            d={bgPath}
+            fill="none"
+            stroke="rgba(30,41,59,0.95)"
+            strokeWidth={26}
+            strokeLinecap="butt"
+          />
 
-            <div className="text-4xl font-semibold tracking-tight text-slate-50">
-              {Math.round(value)}
-            </div>
-            <div className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-              Mbps
-            </div>
-            {sublabel ? (
-              <div className="mt-2 text-center text-xs text-slate-400">
-                {sublabel}
-              </div>
-            ) : null}
+          <path
+            d={fgPath}
+            fill="none"
+            stroke={arcStroke}
+            strokeWidth={26}
+            strokeLinecap="butt"
+            className="transition-all duration-300"
+          />
+
+          {ticks.map((tick) => {
+            const tickAngle = startAngle + sweep * (tick / tickMax);
+            const p = polar(tickAngle, 92);
+            return (
+              <text
+                key={tick}
+                x={p.x}
+                y={p.y}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="fill-slate-400 text-[11px] font-semibold"
+              >
+                {tick}
+              </text>
+            );
+          })}
+
+          <line
+            x1={needleStart.x}
+            y1={needleStart.y}
+            x2={needleEnd.x}
+            y2={needleEnd.y}
+            stroke="rgba(255,255,255,0.9)"
+            strokeWidth={8}
+            strokeLinecap="round"
+          />
+
+          <circle cx={cx} cy={cy} r={10} fill="rgba(255,255,255,0.95)" />
+          <circle cx={cx} cy={cy} r={16} fill="rgba(15,23,42,0.55)" />
+          <circle cx={cx} cy={cy} r={7} fill="rgba(255,255,255,0.95)" />
+        </svg>
+
+        <div className="absolute inset-0 flex flex-col items-center justify-end pb-12">
+          {loading ? (
+            <Loader2 className="mb-3 h-5 w-5 animate-spin text-slate-300" />
+          ) : (
+            <Gauge className="mb-3 h-5 w-5 text-slate-500" />
+          )}
+
+          <div className={cn("text-6xl font-light tracking-tight", toneClass)}>
+            {formatMbps(animatedValue, 2)}
           </div>
+          <div className="mt-1 text-sm text-slate-400">Mbps</div>
+          <div className="mt-3 text-sm text-slate-300">{label}</div>
+          {sublabel ? (
+            <div className="mt-1 text-center text-xs text-slate-500">{sublabel}</div>
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
 
-function SmartProgressDial({
-  job,
-  displayDownload,
-  displayUpload,
+function StatPill({
+  icon,
+  label,
+  value,
+  accent = "slate",
 }: {
-  job: RemoteSpeedJob | null;
-  displayDownload: number | null;
-  displayUpload: number | null;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  accent?: "indigo" | "slate" | "amber";
 }) {
-  const progress = clamp(job?.progress ?? 0, 0, 100);
-  const phase = job?.phase ?? null;
-
-  const runningUpload =
-    phase === "RUNNING" &&
-    (job?.message?.toLowerCase().includes("upload") ?? false);
-
-  const runningDownload =
-    phase === "RUNNING" &&
-    (job?.message?.toLowerCase().includes("download") ?? false);
-
-  const targetMbps =
-    job?.rawResult?.targetMbps ??
-    (job?.rawResult?.resolvedProfile === "plus150"
-      ? 150
-      : job?.rawResult?.resolvedProfile === "std100"
-        ? 100
-        : job?.rawResult?.resolvedProfile === "lite50"
-          ? 50
-          : 100);
-
-  let dialValue = 0;
-  let dialLabel = "Прогресс";
-  let dialSublabel = `${jobPhaseLabel(job?.phase)} · ${progress}%`;
-  let tone: "indigo" | "emerald" | "amber" = "indigo";
-
-  if (runningUpload) {
-    dialValue = displayUpload ?? 0;
-    dialLabel = "Upload";
-    dialSublabel = "Идёт этап upload";
-    tone = "emerald";
-  } else if (runningDownload) {
-    dialValue = displayDownload ?? 0;
-    dialLabel = "Download";
-    dialSublabel = "Идёт этап download";
-    tone = "indigo";
-  } else if (job?.status === "SUCCEEDED") {
-    dialValue = displayDownload ?? displayUpload ?? 0;
-    dialLabel = "Результат";
-    dialSublabel = "Последний завершённый тест";
-    tone = "indigo";
-  } else {
-    dialValue = targetMbps * (progress / 100);
-    dialLabel = "Прогресс";
-    dialSublabel = `${jobPhaseLabel(job?.phase)} · ${progress}%`;
-    tone = "amber";
-  }
+  const accentClass =
+    accent === "indigo"
+      ? "text-indigo-300"
+      : accent === "amber"
+        ? "text-amber-300"
+        : "text-slate-300";
 
   return (
-    <GaugeMeter
-      value={dialValue}
-      max={Math.max(targetMbps, 50)}
-      label={dialLabel}
-      sublabel={dialSublabel}
-      tone={tone}
-      loading={job?.status === "RUNNING" || job?.status === "QUEUED"}
-    />
+    <div className="flex min-w-[120px] items-center gap-2 rounded-2xl border border-slate-800 bg-slate-900/30 px-4 py-3">
+      <div className={accentClass}>{icon}</div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wide text-slate-500">
+          {label}
+        </div>
+        <div className="text-base font-medium text-slate-100">{value}</div>
+      </div>
+    </div>
   );
+}
+
+function statusLabel(s?: RemoteSpeedJobStatus | null) {
+  if (s === "RUNNING") return "Выполняется";
+  if (s === "SUCCEEDED") return "Завершено";
+  if (s === "FAILED") return "Ошибка";
+  if (s === "QUEUED") return "В очереди";
+  if (s === "TIMEOUT") return "Таймаут";
+  return "Ожидание";
+}
+
+function statusBadgeClass(s?: RemoteSpeedJobStatus | null) {
+  if (s === "SUCCEEDED") {
+    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-200";
+  }
+  if (s === "RUNNING" || s === "QUEUED") {
+    return "border-indigo-500/25 bg-indigo-500/10 text-indigo-200";
+  }
+  if (s === "FAILED" || s === "TIMEOUT") {
+    return "border-rose-500/25 bg-rose-500/10 text-rose-200";
+  }
+  return "border-slate-700 bg-slate-900/30 text-slate-300";
 }
 
 export default function RemoteSpeedPage() {
@@ -567,6 +449,7 @@ export default function RemoteSpeedPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [job, setJob] = React.useState<RemoteSpeedJob | null>(null);
   const [result, setResult] = React.useState<RemoteMeasurement | null>(null);
+  const [deviceInfo, setDeviceInfo] = React.useState<DeviceSummary | null>(null);
 
   const [profile, setProfile] = React.useState<SpeedProfile>("std100");
   const [protocol, setProtocol] = React.useState<SpeedProtocol>("udp");
@@ -585,6 +468,21 @@ export default function RemoteSpeedPage() {
     return () => stopPolling();
   }, [stopPolling]);
 
+  const fetchDeviceInfo = React.useCallback(async () => {
+    if (!deviceId) return;
+
+    try {
+      const res = await apiFetch<DeviceSummary>(`/devices/${deviceId}`, {
+        method: "GET",
+        timeoutMs: 30000,
+      });
+
+      setDeviceInfo(res ?? null);
+    } catch {
+      setDeviceInfo(null);
+    }
+  }, [deviceId]);
+
   const fetchLatestHistory = React.useCallback(async () => {
     if (!deviceId) return;
 
@@ -602,7 +500,7 @@ export default function RemoteSpeedPage() {
         setResult(latest.measurement);
       }
     } catch {
-      // ignore
+      //
     }
   }, [deviceId]);
 
@@ -625,7 +523,7 @@ export default function RemoteSpeedPage() {
 
         pollTimerRef.current = window.setTimeout(() => {
           void fetchActiveJob();
-        }, 2500);
+        }, 1800);
         return;
       }
 
@@ -636,7 +534,7 @@ export default function RemoteSpeedPage() {
       if (running) {
         pollTimerRef.current = window.setTimeout(() => {
           void fetchActiveJob();
-        }, 4000);
+        }, 3500);
         return;
       }
 
@@ -649,7 +547,8 @@ export default function RemoteSpeedPage() {
   React.useEffect(() => {
     if (!deviceId) return;
     void fetchLatestHistory();
-  }, [deviceId, fetchLatestHistory]);
+    void fetchDeviceInfo();
+  }, [deviceId, fetchLatestHistory, fetchDeviceInfo]);
 
   async function runRemoteTest() {
     if (!deviceId) {
@@ -681,7 +580,7 @@ export default function RemoteSpeedPage() {
 
       pollTimerRef.current = window.setTimeout(() => {
         void fetchActiveJob();
-      }, 1200);
+      }, 1000);
     } catch (e: any) {
       setRunning(false);
       setError(e?.message ?? "Не удалось запустить remote test");
@@ -702,47 +601,94 @@ export default function RemoteSpeedPage() {
 
   const health = getPrimaryHealth(job);
 
-  const displayDownload =
+  const syntheticDownload =
     result?.downloadMbps ??
     job?.rawResult?.final?.downloadMbps ??
     null;
+
+  const realDownload =
+    job?.rawResult?.final?.realDownloadMbps ??
+    job?.rawResult?.fetchSmall?.throughputMbps ??
+    result?.realDownloadMbps ??
+    null;
+
+  const displayDownload = realDownload ?? syntheticDownload;
 
   const displayUpload =
     result?.uploadMbps ??
     job?.rawResult?.final?.uploadMbps ??
     null;
 
-  const displayRealDownload =
-    job?.rawResult?.final?.realDownloadMbps ??
-    job?.rawResult?.fetchSmall?.throughputMbps ??
-    null;
-
-  const displayLatency =
-    health?.latencyMs ??
+  const displayPing =
     job?.rawResult?.final?.ping?.pingMs ??
+    health?.latencyMs ??
     result?.pingMs ??
     null;
 
-  const displayCpu =
-    job?.rawResult?.final?.cpuLoad ??
-    health?.cpuLoad ??
+  const displayJitter =
+    job?.rawResult?.final?.ping?.jitterMs ??
+    result?.jitterMs ??
     null;
 
-  const resolvedProfile =
-    job?.rawResult?.final?.profileKey ??
-    job?.rawResult?.resolvedProfile ??
-    profile;
+  const displayPointName =
+    deviceInfo?.point?.name ??
+    "—";
 
-  const displayBtestTarget =
-    job?.rawResult?.btestTargetHost ??
+  const displayDeviceName =
+    deviceInfo?.name ??
+    deviceInfo?.uid ??
     job?.targetHost ??
     "—";
 
-  const displayQueueTarget =
+  const displayDeviceIp =
+    deviceInfo?.lastIp ??
+    deviceInfo?.queueTargetIp ??
     job?.rawResult?.queueTargetIp ??
     "—";
 
+  const phase = job?.phase ?? null;
   const progress = clamp(job?.progress ?? 0, 0, 100);
+
+  const runningUpload =
+    phase === "RUNNING" &&
+    (job?.message?.toLowerCase().includes("upload") ?? false);
+
+  const runningDownload =
+    phase === "RUNNING" &&
+    ((job?.message?.toLowerCase().includes("download") ?? false) ||
+      (job?.message?.toLowerCase().includes("fetch") ?? false));
+
+  const gaugeValue =
+    runningUpload
+      ? displayUpload ?? 0
+      : runningDownload
+        ? displayDownload ?? 0
+        : job?.status === "SUCCEEDED"
+          ? displayDownload ?? 0
+          : 0;
+
+  const gaugeLabel =
+    runningUpload
+      ? "Выгрузка"
+      : runningDownload
+        ? "Загрузка"
+        : job?.status === "SUCCEEDED"
+          ? "Результат загрузки"
+          : "Готов к запуску";
+
+  const gaugeTone: "download" | "upload" | "idle" =
+    runningUpload
+      ? "upload"
+      : runningDownload || job?.status === "SUCCEEDED"
+        ? "download"
+        : "idle";
+
+  const gaugeSubLabel =
+    running
+      ? `${job?.message ?? "Выполняется тест"} · ${progress}%`
+      : job?.status === "FAILED"
+        ? "Тест завершился ошибкой"
+        : "Нажми кнопку запуска";
 
   return (
     <div className="grid gap-4">
@@ -752,11 +698,20 @@ export default function RemoteSpeedPage() {
             RemoteSpeed
           </div>
           <div className="mt-1 text-xs text-slate-400">
-            Удалённая проверка устройства через health-check + synthetic speed-test + real download fetch
+            Минималистичный speed-test интерфейс: ping · jitter · download · upload
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {job?.id ? (
+            <Badge
+              variant="outline"
+              className={cn("rounded-full", statusBadgeClass(job.status))}
+            >
+              {statusLabel(job.status)}
+            </Badge>
+          ) : null}
+
           <Button
             variant="secondary"
             className="h-9 rounded-xl bg-slate-900/40 text-slate-100 hover:bg-slate-900"
@@ -768,92 +723,120 @@ export default function RemoteSpeedPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[420px_minmax(0,1fr)]">
-        <Card className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-          <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-200">
-              <RouterIcon className="h-4 w-4 text-indigo-300" />
-              Remote test
+      <Card className="rounded-[28px] border border-slate-800 bg-slate-950/40 p-5 md:p-8">
+        <div className="mb-6 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/30 px-4 py-3">
+            <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+              <MapPin className="h-3.5 w-3.5" />
+              Точка
             </div>
-
-            {result?.status ? (
-              <Badge
-                variant="outline"
-                className={cn("rounded-full", statusBadgeClass(result.status))}
-              >
-                {statusLabel(result.status)}
-              </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className="rounded-full border-slate-700 bg-slate-900/30 text-slate-300"
-              >
-                {jobStateLabel(job)}
-              </Badge>
-            )}
+            <div className="mt-1 text-sm font-medium text-slate-100">
+              {displayPointName}
+            </div>
           </div>
 
-          <Separator className="my-4 bg-slate-800" />
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/30 px-4 py-3">
+            <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+              <RouterIcon className="h-3.5 w-3.5" />
+              Устройство
+            </div>
+            <div className="mt-1 text-sm font-medium text-slate-100">
+              {displayDeviceName}
+            </div>
+          </div>
 
-          <div className="grid gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Bandwidth target (CHR)"
-                icon={<RouterIcon className="h-4 w-4 text-slate-400" />}
-              >
-                <div className="flex h-10 items-center rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100">
-                  {displayBtestTarget}
-                </div>
-              </Field>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/30 px-4 py-3">
+            <div className="inline-flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+              <Waypoints className="h-3.5 w-3.5" />
+              IP устройства
+            </div>
+            <div className="mt-1 text-sm font-medium text-slate-100">
+              {displayDeviceIp}
+            </div>
+          </div>
+        </div>
 
-              <Field
-                label="Queue target (device)"
-                icon={<Waypoints className="h-4 w-4 text-slate-400" />}
+        <div className="mb-8 flex flex-wrap items-center justify-center gap-3">
+          <StatPill
+            icon={<Timer className="h-4 w-4" />}
+            label="Ping"
+            value={displayPing != null ? `${formatMs(displayPing)} ms` : "—"}
+            accent="amber"
+          />
+
+          <StatPill
+            icon={<Activity className="h-4 w-4" />}
+            label="Jitter"
+            value={displayJitter != null ? `${formatMs(displayJitter)} ms` : "—"}
+          />
+
+          <StatPill
+            icon={<ArrowDownCircle className="h-4 w-4" />}
+            label="Download"
+            value={displayDownload != null ? `${formatMbps(displayDownload, 2)} Mbps` : "—"}
+            accent="indigo"
+          />
+
+          <StatPill
+            icon={<ArrowUpCircle className="h-4 w-4" />}
+            label="Upload"
+            value={displayUpload != null ? `${formatMbps(displayUpload, 2)} Mbps` : "—"}
+          />
+        </div>
+
+        <div className="flex justify-center">
+          <SpeedArc
+            value={gaugeValue}
+            max={1000}
+            label={gaugeLabel}
+            activeTone={gaugeTone}
+            sublabel={gaugeSubLabel}
+            loading={running}
+          />
+        </div>
+
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/30 px-4 py-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                Профиль
+              </div>
+              <select
+                value={profile}
+                disabled={running}
+                onChange={(e) => setProfile(e.target.value as SpeedProfile)}
+                className="mt-1 bg-transparent text-sm text-slate-100 outline-none"
               >
-                <div className="flex h-10 items-center rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100">
-                  {displayQueueTarget}
-                </div>
-              </Field>
+                <option value="auto">auto</option>
+                <option value="lite50">lite50</option>
+                <option value="std100">std100</option>
+                <option value="plus150">plus150</option>
+              </select>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Profile"
-                icon={<Waypoints className="h-4 w-4 text-slate-400" />}
-              >
-                <select
-                  value={profile}
-                  disabled={running}
-                  onChange={(e) => setProfile(e.target.value as SpeedProfile)}
-                  className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition focus:border-indigo-500/40"
-                >
-                  <option value="auto">auto</option>
-                  <option value="lite50">lite50</option>
-                  <option value="std100">std100</option>
-                  <option value="plus150">plus150</option>
-                </select>
-              </Field>
+            <div className="h-10 w-px bg-slate-800" />
 
-              <Field
-                label="Protocol"
-                icon={<Wifi className="h-4 w-4 text-slate-400" />}
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                Протокол
+              </div>
+              <select
+                value={protocol}
+                disabled={running}
+                onChange={(e) => setProtocol(e.target.value as SpeedProtocol)}
+                className="mt-1 bg-transparent text-sm text-slate-100 outline-none"
               >
-                <select
-                  value={protocol}
-                  disabled={running}
-                  onChange={(e) => setProtocol(e.target.value as SpeedProtocol)}
-                  className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition focus:border-indigo-500/40"
-                >
-                  <option value="udp">UDP</option>
-                  <option value="tcp">TCP</option>
-                </select>
-              </Field>
+                <option value="udp">UDP</option>
+                <option value="tcp">TCP</option>
+              </select>
             </div>
 
-            <Field
-              label="Duration"
-              icon={<TimerReset className="h-4 w-4 text-slate-400" />}
-            >
+            <div className="h-10 w-px bg-slate-800" />
+
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                Длительность
+              </div>
               <input
                 type="number"
                 min={5}
@@ -861,376 +844,46 @@ export default function RemoteSpeedPage() {
                 value={durationSec}
                 disabled={running}
                 onChange={(e) => setDurationSec(Number(e.target.value || 12))}
-                className="h-10 w-full rounded-xl border border-slate-800 bg-slate-900/30 px-3 text-sm text-slate-100 outline-none transition focus:border-indigo-500/40"
+                className="mt-1 w-20 bg-transparent text-sm text-slate-100 outline-none"
               />
-            </Field>
-
-            <SmartProgressDial
-              job={job}
-              displayDownload={displayDownload}
-              displayUpload={displayUpload}
-            />
-
-            {job ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-medium text-slate-200">
-                    {jobPhaseLabel(job.phase)}
-                  </div>
-                  <div className="text-xs text-slate-400">{progress}%</div>
-                </div>
-
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className="h-full rounded-full bg-indigo-500 transition-all"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-
-                <div className="mt-3 text-xs text-slate-400">
-                  {job.message ?? "—"}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-1 grid gap-3">
-              <Button
-                className={cn(
-                  "h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500",
-                  running && "pointer-events-none opacity-90",
-                )}
-                onClick={runRemoteTest}
-              >
-                {running ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Выполняем…
-                  </>
-                ) : (
-                  <>
-                    <Wifi className="mr-2 h-4 w-4" />
-                    {result ? "Запустить снова" : "Запустить remote test"}
-                  </>
-                )}
-              </Button>
-
-              {error ? (
-                <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-3 text-xs text-rose-100">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4" />
-                    <div className="min-w-0">
-                      <div className="font-medium">Ошибка remote test</div>
-                      <div className="mt-1 break-words text-rose-100/80">
-                        {error}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs text-slate-500">
-                  Проверка выполняется на MikroTik: health-check + upload/download bandwidth-test + fetch download.
-                </div>
-              )}
             </div>
           </div>
-        </Card>
-
-        <div className="grid gap-4">
-          <Card className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-slate-200">
-                Ключевые метрики
-              </div>
-
-              {job?.id ? (
-                <Badge
-                  variant="outline"
-                  className="rounded-full border-slate-700 bg-slate-900/30 text-slate-300"
-                >
-                  Job: {job.id.slice(0, 8)}…
-                </Badge>
-              ) : null}
-            </div>
-
-            <Separator className="my-4 bg-slate-800" />
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <MetricTile
-                title="Загрузка"
-                value={formatMbps(displayDownload)}
-                unit={displayDownload != null ? "Мбит/с" : ""}
-                tone="indigo"
-              />
-              <MetricTile
-                title="Отдача"
-                value={formatMbps(displayUpload)}
-                unit={displayUpload != null ? "Мбит/с" : ""}
-                tone="emerald"
-              />
-              <MetricTile
-                title="Real download"
-                value={formatMbps(displayRealDownload)}
-                unit={displayRealDownload != null ? "Мбит/с" : ""}
-                tone="amber"
-              />
-              <MetricTile
-                title="Latency"
-                value={formatMs(displayLatency)}
-                unit={displayLatency != null ? "мс" : ""}
-                tone="slate"
-              />
-            </div>
-
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <MiniStat label="CPU" value={formatPercent(displayCpu)} />
-              <MiniStat label="Профиль" value={profileLabel(resolvedProfile)} />
-              <MiniStat
-                label="Туннель"
-                value={formatTunnelState(job?.rawResult?.healthUnderLoad?.tunnelRunning)}
-              />
-            </div>
-          </Card>
-
-          <Card className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5">
-            <div className="text-sm font-medium text-slate-200">Детали remote test</div>
-            <Separator className="my-4 bg-slate-800" />
-
-            {!result && !job?.rawResult?.final ? (
-              <div className="grid gap-3">
-                <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4 text-sm text-slate-300">
-                  {running
-                    ? "Идёт удалённая проверка устройства…"
-                    : "Запусти remote test, чтобы увидеть измерение."}
-                </div>
-
-                {job ? (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    <InfoTile
-                      icon={<Clock3 className="h-4 w-4 text-slate-400" />}
-                      title="Состояние job"
-                    >
-                      <div className="text-sm text-slate-100">{jobStateLabel(job)}</div>
-                      <div className="mt-1 text-xs text-slate-400">
-                        {job.message ?? "—"}
-                      </div>
-                    </InfoTile>
-
-                    <InfoTile
-                      icon={<Gauge className="h-4 w-4 text-slate-400" />}
-                      title="Фаза / прогресс"
-                    >
-                      <div className="text-sm text-slate-100">{jobPhaseLabel(job.phase)}</div>
-                      <div className="mt-1 text-xs text-slate-400">{progress}%</div>
-                    </InfoTile>
-
-                    <InfoTile
-                      icon={<Waypoints className="h-4 w-4 text-slate-400" />}
-                      title="Профиль / протокол"
-                    >
-                      <div className="text-sm text-slate-100">
-                        {profileLabel(job.rawResult?.resolvedProfile ?? profile)} /{" "}
-                        {protocolLabel(job.protocol ?? protocol)}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-400">
-                        {job.durationSec ?? durationSec} сек
-                      </div>
-                    </InfoTile>
-
-                    <InfoTile
-                      icon={<RouterIcon className="h-4 w-4 text-slate-400" />}
-                      title="Цели"
-                    >
-                      <div className="text-sm text-slate-100">
-                        CHR: {displayBtestTarget}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-400">
-                        Queue: {displayQueueTarget}
-                      </div>
-                    </InfoTile>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <InfoTile
-                    icon={<ShieldCheck className="h-4 w-4 text-slate-400" />}
-                    title="Health before"
-                  >
-                    <div className="grid gap-2 text-sm text-slate-100">
-                      <div>Latency: {formatMs(job?.rawResult?.healthBefore?.latencyMs)} мс</div>
-                      <div>CPU: {formatPercent(job?.rawResult?.healthBefore?.cpuLoad)}</div>
-                      <div>
-                        Tunnel: {formatTunnelState(job?.rawResult?.healthBefore?.tunnelRunning)}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {job?.rawResult?.healthBefore?.reason ?? "—"}
-                      </div>
-                    </div>
-                  </InfoTile>
-
-                  <InfoTile
-                    icon={<Activity className="h-4 w-4 text-slate-400" />}
-                    title="Health under load"
-                  >
-                    <div className="grid gap-2 text-sm text-slate-100">
-                      <div>Latency: {formatMs(job?.rawResult?.healthUnderLoad?.latencyMs)} мс</div>
-                      <div>CPU: {formatPercent(job?.rawResult?.healthUnderLoad?.cpuLoad)}</div>
-                      <div>
-                        Tunnel: {formatTunnelState(job?.rawResult?.healthUnderLoad?.tunnelRunning)}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {job?.rawResult?.healthUnderLoad?.reason ?? "—"}
-                      </div>
-                    </div>
-                  </InfoTile>
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <InfoTile
-                    icon={<Wifi className="h-4 w-4 text-slate-400" />}
-                    title="Upload test"
-                  >
-                    <div className="grid gap-2 text-sm text-slate-100">
-                      <div>Direction: {job?.rawResult?.uploadTest?.direction ?? "transmit"}</div>
-                      <div>Protocol: {protocolLabel(job?.rawResult?.uploadTest?.protocol ?? "udp")}</div>
-                      <div>Remote CPU: {formatPercent(job?.rawResult?.uploadTest?.remoteCpuLoad)}</div>
-                      <div>Connections: {job?.rawResult?.uploadTest?.connectionCount ?? "—"}</div>
-                    </div>
-                  </InfoTile>
-
-                  <InfoTile
-                    icon={<Cpu className="h-4 w-4 text-slate-400" />}
-                    title="Download test"
-                  >
-                    <div className="grid gap-2 text-sm text-slate-100">
-                      <div>Direction: {job?.rawResult?.downloadTest?.direction ?? "receive"}</div>
-                      <div>Protocol: {protocolLabel(job?.rawResult?.downloadTest?.protocol ?? "tcp")}</div>
-                      <div>Remote CPU: {formatPercent(job?.rawResult?.downloadTest?.remoteCpuLoad)}</div>
-                      <div>Connections: {job?.rawResult?.downloadTest?.connectionCount ?? "—"}</div>
-                    </div>
-                  </InfoTile>
-                </div>
-
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <InfoTile
-                    icon={<Activity className="h-4 w-4 text-slate-400" />}
-                    title="Fetch small"
-                  >
-                    <div className="grid gap-2 text-sm text-slate-100">
-                      <div className="break-all">URL: {job?.rawResult?.fetchSmall?.url ?? "—"}</div>
-                      <div>
-                        Throughput:{" "}
-                        {job?.rawResult?.fetchSmall?.throughputMbps != null
-                          ? `${job.rawResult.fetchSmall.throughputMbps} Мбит/с`
-                          : "—"}
-                      </div>
-                      <div>
-                        Duration:{" "}
-                        {job?.rawResult?.fetchSmall?.durationSec != null
-                          ? `${job.rawResult.fetchSmall.durationSec} сек`
-                          : "—"}
-                      </div>
-                      <div>
-                        Timeout: {job?.rawResult?.fetchSmall?.timedOut ? "Да" : "Нет"}
-                      </div>
-                    </div>
-                  </InfoTile>
-
-                  <InfoTile
-                    icon={<Clock3 className="h-4 w-4 text-slate-400" />}
-                    title="Fetch large"
-                  >
-                    <div className="grid gap-2 text-sm text-slate-100">
-                      <div className="break-all">URL: {job?.rawResult?.fetchLarge?.url ?? "—"}</div>
-                      <div>
-                        Throughput:{" "}
-                        {job?.rawResult?.fetchLarge?.throughputMbps != null
-                          ? `${job.rawResult.fetchLarge.throughputMbps} Мбит/с`
-                          : "—"}
-                      </div>
-                      <div>
-                        Duration:{" "}
-                        {job?.rawResult?.fetchLarge?.durationSec != null
-                          ? `${job.rawResult.fetchLarge.durationSec} сек`
-                          : "—"}
-                      </div>
-                      <div>
-                        Timeout: {job?.rawResult?.fetchLarge?.timedOut ? "Да" : "Нет"}
-                      </div>
-                    </div>
-                  </InfoTile>
-                </div>
-
-                <InfoTile
-                  icon={<AlertTriangle className="h-4 w-4 text-slate-400" />}
-                  title="Диагностика"
-                >
-                  <div className="grid gap-2 text-sm text-slate-100">
-                    <div>
-                      Причина:{" "}
-                      {diagnosisLabel(job?.rawResult?.final?.diagnosis?.suspectedCause)}
-                    </div>
-                    <div>
-                      Fetch small:{" "}
-                      {job?.rawResult?.final?.diagnosis?.fetchSmallMbps != null
-                        ? `${job.rawResult.final.diagnosis.fetchSmallMbps} Мбит/с`
-                        : "—"}
-                    </div>
-                    <div>
-                      Fetch large timeout:{" "}
-                      {job?.rawResult?.final?.diagnosis?.fetchLargeTimedOut == null
-                        ? "—"
-                        : job.rawResult.final.diagnosis.fetchLargeTimedOut
-                          ? "Да"
-                          : "Нет"}
-                    </div>
-                  </div>
-                </InfoTile>
-
-                {result ? (
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                    <div className="mb-3 flex items-center gap-2 text-sm font-medium text-slate-200">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-                      Сохранённое измерение
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-4">
-                      <MiniStat label="Download" value={`${result.downloadMbps} Мбит/с`} />
-                      <MiniStat label="Upload" value={`${result.uploadMbps} Мбит/с`} />
-                      <MiniStat
-                        label="Ping / latency"
-                        value={result.pingMs != null ? `${result.pingMs} мс` : "—"}
-                      />
-                      <MiniStat label="Статус" value={statusLabel(result.status)} />
-                    </div>
-
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <MiniStat
-                        label="Jitter"
-                        value={result.jitterMs != null ? `${result.jitterMs} мс` : "—"}
-                      />
-                      <MiniStat
-                        label="Packet loss"
-                        value={result.packetLoss != null ? `${result.packetLoss}%` : "—"}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {running ? (
-              <div className="mt-5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-3 text-xs text-indigo-100">
-                <div className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Воркер выполняет health-check, затем upload/download bandwidth-test и fetch download.
-                </div>
-              </div>
-            ) : null}
-          </Card>
         </div>
-      </div>
+
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <Button
+            className={cn(
+              "h-11 min-w-[220px] rounded-xl bg-indigo-600 hover:bg-indigo-500",
+              running && "pointer-events-none opacity-90",
+            )}
+            onClick={runRemoteTest}
+          >
+            {running ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Выполняем…
+              </>
+            ) : (
+              <>
+                <Wifi className="mr-2 h-4 w-4" />
+                Запустить тест
+              </>
+            )}
+          </Button>
+
+          {error ? (
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {error}
+            </div>
+          ) : null}
+
+          {job?.status === "FAILED" && job?.errorMessage ? (
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {job.errorMessage}
+            </div>
+          ) : null}
+        </div>
+      </Card>
     </div>
   );
 }

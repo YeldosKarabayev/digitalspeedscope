@@ -9,6 +9,7 @@ import { DSS_FETCH_URLS, DSS_LIMITS, DSS_PROFILES } from "./remote-speed.constan
 import { MikrotikService } from "../mikrotik/mikrotik.service";
 import { RemoteHealthRunner } from "./remote-health.runner";
 import { MikrotikFetchRunner } from "./mikrotik-fetch.runner";
+import { AlertsService } from "../alerts/alerts.service";
 
 type JobWithDevice = Awaited<
   ReturnType<PrismaService["remoteSpeedJob"]["findUnique"]>
@@ -74,6 +75,7 @@ export class RemoteSpeedWorker {
     private readonly mikrotikSpeedRunner: MikrotikSpeedRunner,
     private readonly mikrotikFetchRunner: MikrotikFetchRunner,
     private readonly mikrotik: MikrotikService,
+    private readonly alertsService: AlertsService,
   ) { }
 
   @Interval(5000)
@@ -614,6 +616,15 @@ export class RemoteSpeedWorker {
         } as any,
       });
 
+      if (measurement.status === "POOR") {
+        await this.alertsService.createAlert({
+          type: "MEASUREMENT_POOR",
+          severity: "WARNING",
+          message: `Poor measurement detected: DL ${downloadMbps} Mbps, UL ${uploadMbps} Mbps, ping ${health.latencyMs ?? 0} ms`,
+          pointId: job.device.uid ?? null,
+        });
+      }
+
       await this.setPhase(jobId, "COOLING", 95, "Cooling down");
       await sleep((DSS_LIMITS.COOLDOWN_SEC ?? 8) * 1000);
 
@@ -660,6 +671,13 @@ export class RemoteSpeedWorker {
         } as any,
       });
     } catch (e: any) {
+
+      await this.alertsService.createAlert({
+        type: "REMOTE_SPEED_FAILED",
+        severity: "ERROR",
+        message: `Remote speed test failed for device ${job.device.uid ?? job.deviceId}: ${e?.message ?? "Unknown error"}`,
+        pointId: job.device.uid ?? null,
+      });
       this.logger.error(
         `RemoteSpeed job failed: jobId=${jobId} deviceId=${job.deviceId} host=${job.device.mikrotikHost} message=${e?.message ?? e}`,
         e?.stack,
