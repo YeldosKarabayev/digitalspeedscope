@@ -31,6 +31,7 @@ type Point = {
   lat: number;
   lng: number;
   download: number;
+  realDownload: number | null;
   upload: number;
   ping: number;
   isp?: string;
@@ -39,73 +40,73 @@ type Point = {
 };
 
 
-const MOCK_POINTS: Point[] = [
-  {
-    id: "p1",
-    name: "Алматы · Центр",
-    city: "Алматы",
-    lat: 43.238949,
-    lng: 76.889709,
-    download: 940,
-    upload: 125,
-    ping: 12,
-    isp: "DigitalNet",
-    deviceUid: "MKT-ALM-012",
-    lastSeen: "29 янв, 21:40",
-  },
-  {
-    id: "p2",
-    name: "Алматы · Восток",
-    city: "Алматы",
-    lat: 43.25654,
-    lng: 76.92848,
-    download: 420,
-    upload: 98,
-    ping: 19,
-    isp: "KazFiber",
-    deviceUid: "MKT-ALM-021",
-    lastSeen: "29 янв, 21:38",
-  },
-  {
-    id: "p3",
-    name: "Алматы · Юг",
-    city: "Алматы",
-    lat: 43.205,
-    lng: 76.85,
-    download: 95,
-    upload: 22,
-    ping: 58,
-    isp: "CityLink",
-    deviceUid: "MKT-ALM-034",
-    lastSeen: "29 янв, 21:35",
-  },
-  {
-    id: "p4",
-    name: "Астана · Левый берег",
-    city: "Астана",
-    lat: 51.1282,
-    lng: 71.4304,
-    download: 310,
-    upload: 80,
-    ping: 24,
-    isp: "DigitalNet",
-    deviceUid: "MKT-AST-014",
-    lastSeen: "29 янв, 21:33",
-  },
-  {
-    id: "p5",
-    name: "Шымкент · Центр",
-    city: "Шымкент",
-    lat: 42.3155,
-    lng: 69.5869,
-    download: 210,
-    upload: 60,
-    ping: 31,
-    isp: "KazFiber",
-    deviceUid: "MKT-SHY-002",
-    lastSeen: "29 янв, 21:31",
-  },
-];
+// const MOCK_POINTS: Point[] = [
+//   {
+//     id: "p1",
+//     name: "Алматы · Центр",
+//     city: "Алматы",
+//     lat: 43.238949,
+//     lng: 76.889709,
+//     download: 940,
+//     upload: 125,
+//     ping: 12,
+//     isp: "DigitalNet",
+//     deviceUid: "MKT-ALM-012",
+//     lastSeen: "29 янв, 21:40",
+//   },
+//   {
+//     id: "p2",
+//     name: "Алматы · Восток",
+//     city: "Алматы",
+//     lat: 43.25654,
+//     lng: 76.92848,
+//     download: 420,
+//     upload: 98,
+//     ping: 19,
+//     isp: "KazFiber",
+//     deviceUid: "MKT-ALM-021",
+//     lastSeen: "29 янв, 21:38",
+//   },
+//   {
+//     id: "p3",
+//     name: "Алматы · Юг",
+//     city: "Алматы",
+//     lat: 43.205,
+//     lng: 76.85,
+//     download: 95,
+//     upload: 22,
+//     ping: 58,
+//     isp: "CityLink",
+//     deviceUid: "MKT-ALM-034",
+//     lastSeen: "29 янв, 21:35",
+//   },
+//   {
+//     id: "p4",
+//     name: "Астана · Левый берег",
+//     city: "Астана",
+//     lat: 51.1282,
+//     lng: 71.4304,
+//     download: 310,
+//     upload: 80,
+//     ping: 24,
+//     isp: "DigitalNet",
+//     deviceUid: "MKT-AST-014",
+//     lastSeen: "29 янв, 21:33",
+//   },
+//   {
+//     id: "p5",
+//     name: "Шымкент · Центр",
+//     city: "Шымкент",
+//     lat: 42.3155,
+//     lng: 69.5869,
+//     download: 210,
+//     upload: 60,
+//     ping: 31,
+//     isp: "KazFiber",
+//     deviceUid: "MKT-SHY-002",
+//     lastSeen: "29 янв, 21:31",
+//   },
+// ];
 
 function metricLabel(metric: Metric) {
   if (metric === "download") return "Загрузка";
@@ -530,7 +531,7 @@ export default function MapScreen() {
                   <Separator className="my-4 bg-slate-800" />
 
                   <div className="grid grid-cols-3 gap-3 text-xs">
-                    <MetricCell label="Загрузка" value={`${selected.download} Мбит/с`} tone="emerald" />
+                    <MetricCell label="Загрузка" value={`${selected.realDownload} Мбит/с`} tone="emerald" />
                     <MetricCell label="Отдача" value={`${selected.upload} Мбит/с`} tone="indigo" />
                     <MetricCell label="Пинг" value={`${selected.ping} мс`} tone="amber" />
                   </div>
@@ -559,9 +560,9 @@ export default function MapScreen() {
                 <div className="grid gap-2">
                   <Button className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500">
                     <Link href="/measurements">
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Открыть измерения
+                      {/* <ExternalLink className="mr-2 h-4 w-4" /> */}
                     </Link>
+                    Открыть измерения
                   </Button>
                   <Button
                     variant="secondary"
