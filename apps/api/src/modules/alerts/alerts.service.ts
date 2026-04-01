@@ -118,7 +118,6 @@ export class AlertsService {
         message: string;
         pointId?: string | null;
     }) {
-
         let safePointId: string | null = null;
 
         if (input.pointId) {
@@ -135,7 +134,7 @@ export class AlertsService {
                 type: input.type,
                 severity: input.severity,
                 message: input.message,
-                pointId: input.pointId ?? null,
+                pointId: safePointId,
                 isRead: false,
             },
         });

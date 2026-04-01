@@ -622,10 +622,12 @@ export class RemoteSpeedWorker {
             type: "MEASUREMENT_POOR",
             severity: "WARNING",
             message: `Poor measurement detected: DL ${downloadMbps} Mbps, UL ${uploadMbps} Mbps, ping ${health.latencyMs ?? 0} ms`,
-            pointId: job.device.uid ?? null,
+            pointId: job.device.id ?? null,
           });
-        } catch (error) {
-
+        } catch (alertErr: any) {
+          this.logger.warn(
+            `Failed to create poor-measurement alert for jobId=${jobId}: ${alertErr?.message ?? alertErr}`,
+          );
         }
       }
 
