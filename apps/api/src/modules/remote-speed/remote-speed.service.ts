@@ -16,6 +16,10 @@ export type CreateRemoteSpeedJobInput = {
 export class RemoteSpeedService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private getStaleBefore() {
+    return new Date(Date.now() - 2 * 60 * 1000);
+  }
+
   async createJob(deviceId: string, body: CreateRemoteSpeedJobInput) {
     const device = await this.prisma.device.findUnique({
       where: { id: deviceId },
@@ -53,10 +57,25 @@ export class RemoteSpeedService {
       );
     }
 
+    await this.prisma.remoteSpeedJob.updateMany({
+      where: {
+        deviceId,
+        status: { in: ["QUEUED", "RUNNING"] as any },
+        updatedAt: { lt: this.getStaleBefore() },
+      },
+      data: {
+        status: "FAILED" as any,
+        phase: "FAILED",
+        message: "Recovered stale job before creating new one",
+        errorMessage: "Job became stale",
+      } as any,
+    });
+
     const existing = await this.prisma.remoteSpeedJob.findFirst({
       where: {
         deviceId,
         status: { in: ["QUEUED", "RUNNING"] as any },
+        updatedAt: { gte: this.getStaleBefore() },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -131,10 +150,25 @@ export class RemoteSpeedService {
       throw new NotFoundException("Device not found");
     }
 
+    await this.prisma.remoteSpeedJob.updateMany({
+      where: {
+        deviceId,
+        status: { in: ["QUEUED", "RUNNING"] as any },
+        updatedAt: { lt: this.getStaleBefore() },
+      },
+      data: {
+        status: "FAILED" as any,
+        phase: "FAILED",
+        message: "Recovered stale active job",
+        errorMessage: "Job became stale",
+      } as any,
+    });
+
     const item = await this.prisma.remoteSpeedJob.findFirst({
       where: {
         deviceId,
         status: { in: ["QUEUED", "RUNNING"] as any },
+        updatedAt: { gte: this.getStaleBefore() },
       },
       orderBy: { createdAt: "desc" },
       include: { measurement: true },

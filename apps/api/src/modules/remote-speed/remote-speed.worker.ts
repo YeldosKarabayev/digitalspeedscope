@@ -84,6 +84,7 @@ export class RemoteSpeedWorker {
     this.tickInProgress = true;
 
     try {
+      await this.recoverStaleRunningJobs();
       const maxConcurrency = DSS_LIMITS.MAX_CONCURRENCY ?? 1;
 
       const dbRunning = await this.prisma.remoteSpeedJob.count({
@@ -166,6 +167,27 @@ export class RemoteSpeedWorker {
         } as any,
       } as any,
     });
+  }
+
+  private async recoverStaleRunningJobs() {
+    const staleBefore = new Date(Date.now() - 2 * 60 * 1000); // 2 минуты
+
+    const recovered = await this.prisma.remoteSpeedJob.updateMany({
+      where: {
+        status: { in: ["RUNNING", "QUEUED"] as any },
+        updatedAt: { lt: staleBefore },
+      },
+      data: {
+        status: "FAILED" as any,
+        phase: "FAILED",
+        message: "Recovered stale worker job",
+        errorMessage: "Worker restarted or job became stale",
+      } as any,
+    });
+
+    if (recovered.count > 0) {
+      this.logger.warn(`Recovered ${recovered.count} stale job(s)`);
+    }
   }
 
   private getChrConn() {
