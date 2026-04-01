@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { Filter, RefreshCw, Layers, MapPinned, ExternalLink, Link } from "lucide-react";
+import { Filter, RefreshCw, Layers, MapPinned, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { useMapPoints } from "./hooks/useMapPoints";
 
 
@@ -574,9 +575,7 @@ export default function MapScreen() {
 
                 <div className="grid gap-2">
                   <Button asChild className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500">
-                    <Link href={`/measurements?pointId=${selected.id}`}>
-                      Открыть измерения
-                    </Link>
+                    <Link href="/measurements">Открыть измерения</Link>
                   </Button>
                   <Button
                     variant="secondary"
