@@ -114,8 +114,18 @@ function metricLabel(metric: Metric) {
   return "Пинг";
 }
 
+function getDownloadValue(point: Point) {
+  if (point.realDownload != null) return point.realDownload;
+  if (point.download != null) return point.download;
+  return null;
+}
+
 function formatMetric(metric: Metric, point: Point) {
-  if (metric === "download") return `${point.download} Мбит/с`;
+  if (metric === "download") {
+    const value = getDownloadValue(point);
+    return value != null ? `${value} Мбит/с` : "—";
+  }
+
   if (metric === "upload") return `${point.upload} Мбит/с`;
   return `${point.ping} мс`;
 }
@@ -127,8 +137,9 @@ function markerColor(metric: Metric, p: Point) {
     if (p.ping <= 35) return "rgba(245,158,11,0.95)";
     return "rgba(244,63,94,0.95)";
   }
-  const val = metric === "download" ? p.download : p.upload;
-  // простые пороги для MVP
+
+  const val = metric === "download" ? getDownloadValue(p) ?? 0 : p.upload;
+
   if (val >= (metric === "download" ? 300 : 120)) return "rgba(34,197,94,0.95)";
   if (val >= (metric === "download" ? 150 : 60)) return "rgba(245,158,11,0.95)";
   return "rgba(244,63,94,0.95)";
@@ -531,7 +542,11 @@ export default function MapScreen() {
                   <Separator className="my-4 bg-slate-800" />
 
                   <div className="grid grid-cols-3 gap-3 text-xs">
-                    <MetricCell label="Загрузка" value={`${selected.realDownload} Мбит/с`} tone="emerald" />
+                    <MetricCell
+                      label="Загрузка"
+                      value={formatMetric("download", selected)}
+                      tone="emerald"
+                    />
                     <MetricCell label="Отдача" value={`${selected.upload} Мбит/с`} tone="indigo" />
                     <MetricCell label="Пинг" value={`${selected.ping} мс`} tone="amber" />
                   </div>
