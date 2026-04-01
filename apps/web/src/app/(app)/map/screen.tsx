@@ -573,11 +573,10 @@ export default function MapScreen() {
                 </div>
 
                 <div className="grid gap-2">
-                  <Button className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500">
-                    <Link href="/measurements">
-                      {/* <ExternalLink className="mr-2 h-4 w-4" /> */}
+                  <Button asChild className="h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500">
+                    <Link href={`/measurements?pointId=${selected.id}`}>
+                      Открыть измерения
                     </Link>
-                    Открыть измерения
                   </Button>
                   <Button
                     variant="secondary"
