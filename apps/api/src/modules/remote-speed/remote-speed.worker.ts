@@ -617,12 +617,16 @@ export class RemoteSpeedWorker {
       });
 
       if (measurement.status === "POOR") {
-        await this.alertsService.createAlert({
-          type: "MEASUREMENT_POOR",
-          severity: "WARNING",
-          message: `Poor measurement detected: DL ${downloadMbps} Mbps, UL ${uploadMbps} Mbps, ping ${health.latencyMs ?? 0} ms`,
-          pointId: job.device.uid ?? null,
-        });
+        try {
+          await this.alertsService.createAlert({
+            type: "MEASUREMENT_POOR",
+            severity: "WARNING",
+            message: `Poor measurement detected: DL ${downloadMbps} Mbps, UL ${uploadMbps} Mbps, ping ${health.latencyMs ?? 0} ms`,
+            pointId: job.device.uid ?? null,
+          });
+        } catch (error) {
+
+        }
       }
 
       await this.setPhase(jobId, "COOLING", 95, "Cooling down");
@@ -672,12 +676,19 @@ export class RemoteSpeedWorker {
       });
     } catch (e: any) {
 
-      await this.alertsService.createAlert({
-        type: "REMOTE_SPEED_FAILED",
-        severity: "ERROR",
-        message: `Remote speed test failed for device ${job.device.uid ?? job.deviceId}: ${e?.message ?? "Unknown error"}`,
-        pointId: job.device.uid ?? null,
-      });
+      try {
+        await this.alertsService.createAlert({
+          type: "REMOTE_SPEED_FAILED",
+          severity: "ERROR",
+          message: `Remote speed test failed for device ${job.device.uid ?? job.deviceId}: ${e?.message ?? "Unknown error"}`,
+          pointId: job.device?.uid ?? null,
+        });
+      } catch (alertErr: any) {
+        this.logger.warn(
+          `Failed to create alert for jobId=${jobId}: ${alertErr?.message ?? alertErr}`,
+        );
+      }
+
       this.logger.error(
         `RemoteSpeed job failed: jobId=${jobId} deviceId=${job.deviceId} host=${job.device.mikrotikHost} message=${e?.message ?? e}`,
         e?.stack,
