@@ -377,7 +377,13 @@ export class RemoteSpeedWorker {
   async process(jobId: string) {
     const job = await this.prisma.remoteSpeedJob.findUnique({
       where: { id: jobId },
-      include: { device: true },
+      include: {
+        device: {
+          include: {
+            point: true,
+          },
+        },
+      },
     });
 
     if (!job?.device) return;
@@ -622,7 +628,7 @@ export class RemoteSpeedWorker {
             type: "MEASUREMENT_POOR",
             severity: "WARNING",
             message: `Poor measurement detected: DL ${downloadMbps} Mbps, UL ${uploadMbps} Mbps, ping ${health.latencyMs ?? 0} ms`,
-            pointId: job.device.id ?? null,
+            pointId: job.device.point?.id ?? null,
           });
         } catch (alertErr: any) {
           this.logger.warn(
@@ -683,11 +689,11 @@ export class RemoteSpeedWorker {
           type: "REMOTE_SPEED_FAILED",
           severity: "ERROR",
           message: `Remote speed test failed for device ${job.device.uid ?? job.deviceId}: ${e?.message ?? "Unknown error"}`,
-          pointId: job.device?.uid ?? null,
+          pointId: job.device.point?.id ?? null,
         });
       } catch (alertErr: any) {
         this.logger.warn(
-          `Failed to create alert for jobId=${jobId}: ${alertErr?.message ?? alertErr}`,
+          `Failed to create failed-job alert for jobId=${jobId}: ${alertErr?.message ?? alertErr}`,
         );
       }
 
