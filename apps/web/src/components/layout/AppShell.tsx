@@ -57,7 +57,7 @@ const NAV: NavItem[] = [
   { label: "Карта", href: "/map", icon: Map },
   { label: "Измерения", href: "/measurements", icon: Gauge },
   { label: "Устройства", href: "/devices", icon: Router },
-  { label: "SpeedTest", href: "/speedtest", icon: Gauge },
+  // { label: "SpeedTest", href: "/speedtest", icon: Gauge },
   { label: "Отчёты", href: "/reports", icon: FileText },
   { label: "SMS", href: "/sms", icon: MessagesSquare },
   { label: "Оповещения", href: "/alerts", icon: Bell },
