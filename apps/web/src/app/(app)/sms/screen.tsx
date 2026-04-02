@@ -57,6 +57,8 @@ export default function SmsPage() {
     const [topupLoading, setTopupLoading] = React.useState(false);
 
     const [points, setPoints] = React.useState<{ id: string; name: string }[]>([]);
+    const [page, setPage] = React.useState(1);
+    const [pageSize, setPageSize] = React.useState(10);
 
     const [summary, setSummary] = React.useState({
         total: 0,
@@ -64,10 +66,25 @@ export default function SmsPage() {
         failed: 0,
     });
 
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+
+    const paginatedRows = React.useMemo(() => {
+        const start = (page - 1) * pageSize;
+        return rows.slice(start, start + pageSize);
+    }, [rows, page, pageSize]);
+
+    React.useEffect(() => {
+        const nextTotalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+        if (page > nextTotalPages) {
+            setPage(nextTotalPages);
+        }
+    }, [rows, page, pageSize]);
+
     async function loadPoints() {
         try {
             const res = await fetch(`${API_URL}/portal/points`);
             const data = await res.json();
+            setPage(1);
             setPoints(data ?? []);
         } catch (e) {
             console.error(e);
@@ -429,7 +446,7 @@ export default function SmsPage() {
                                         </Td>
                                     </tr>
                                 ) : (
-                                    rows.map((row) => (
+                                    paginatedRows.map((row) => (
                                         <tr key={row.id} className="transition hover:bg-slate-900/40">
                                             <Td>{row.phone ?? "—"}</Td>
                                             <Td>{row.pointName}</Td>
@@ -445,6 +462,60 @@ export default function SmsPage() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+
+                    <div className="flex flex-col gap-3 border-t border-slate-800 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                        <div className="text-sm text-slate-400">
+                            Показано{" "}
+                            <span className="text-slate-200">
+                                {rows.length === 0 ? 0 : (page - 1) * pageSize + 1}
+                            </span>
+                            {"–"}
+                            <span className="text-slate-200">
+                                {Math.min(page * pageSize, rows.length)}
+                            </span>
+                            {" "}из <span className="text-slate-200">{rows.length}</span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-slate-400">На странице</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => {
+                                        setPageSize(Number(e.target.value));
+                                        setPage(1);
+                                    }}
+                                    className="h-10 rounded-xl border border-slate-800 bg-slate-900/60 px-3 text-sm text-white outline-none"
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="h-10 rounded-xl border border-slate-800 bg-slate-900/70 px-4 text-sm text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    Назад
+                                </button>
+
+                                <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 text-sm text-slate-200">
+                                    Стр. {page} / {totalPages}
+                                </div>
+
+                                <button
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                    disabled={page >= totalPages}
+                                    className="h-10 rounded-xl border border-slate-800 bg-slate-900/70 px-4 text-sm text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    Вперёд
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

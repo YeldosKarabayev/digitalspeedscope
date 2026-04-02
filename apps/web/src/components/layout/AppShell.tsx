@@ -60,7 +60,7 @@ const NAV: NavItem[] = [
   { label: "SpeedTest", href: "/speedtest", icon: Gauge },
   { label: "Отчёты", href: "/reports", icon: FileText },
   { label: "SMS", href: "/sms", icon: MessagesSquare },
-  { label: "Оповещения", href: "/alerts", icon: Bell, badge: "0" },
+  { label: "Оповещения", href: "/alerts", icon: Bell },
   { label: "Инструменты", href: "/tools", icon: Wrench },
   { label: "Настройки", href: "/settings", icon: Settings },
 ];
@@ -79,15 +79,43 @@ export default function AppShell({
   subtitle?: string;
 }) {
   const [collapsed, setCollapsed] = React.useState(false);
+  const [alertsCount, setAlertsCount] = React.useState(0);
 
   const transitionKey = (title ?? "page") + (subtitle ?? "");
+
+  React.useEffect(() => {
+    async function loadAlerts() {
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/alerts/unread-count`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setAlertsCount(data.count ?? 0);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    loadAlerts();
+
+    // авто-обновление каждые 10 сек (можно убрать)
+    const t = setInterval(loadAlerts, 10000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <RangeProvider defaultRange="24h">
       <div className="min-h-screen bg-slate-950 text-slate-100">
         <div className="mx-auto max-w-[1440px]">
           <div className="flex">
-            <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((v) => !v)} />
+            <Sidebar
+              collapsed={collapsed}
+              onToggle={() => setCollapsed((v) => !v)}
+              alertsCount={alertsCount}
+            />
 
             <main className="flex-1">
               <Topbar title={title} subtitle={subtitle} />
@@ -190,9 +218,11 @@ function useClientPathname() {
 function Sidebar({
   collapsed,
   onToggle,
+  alertsCount,
 }: {
   collapsed: boolean;
   onToggle: () => void;
+  alertsCount: number;
 }) {
   const pathname = useClientPathname();
   const router = useRouter();
@@ -263,7 +293,7 @@ function Sidebar({
                       {!collapsed && (
                         <div className="flex w-full items-center justify-between">
                           <span className={cn(active ? "font-medium" : "font-normal")}>{item.label}</span>
-                          {item.badge !== undefined && (
+                          {item.label === "Оповещения" && alertsCount > 0 && (
                             <span
                               className={cn(
                                 "rounded-full border px-2 py-0.5 text-[11px]",
@@ -272,7 +302,7 @@ function Sidebar({
                                   : "border-slate-700 bg-slate-900/60 text-slate-200/70"
                               )}
                             >
-                              {item.badge}
+                              {alertsCount}
                             </span>
                           )}
                         </div>
