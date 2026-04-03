@@ -82,7 +82,7 @@ export default function AppShell({
   const [alertsCount, setAlertsCount] = React.useState(0);
 
   const transitionKey = (title ?? "page") + (subtitle ?? "");
-  const API_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
   React.useEffect(() => {
     async function loadAlerts() {
