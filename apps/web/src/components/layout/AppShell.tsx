@@ -82,11 +82,12 @@ export default function AppShell({
   const [alertsCount, setAlertsCount] = React.useState(0);
 
   const transitionKey = (title ?? "page") + (subtitle ?? "");
+  const API_URL = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:4000";
 
   React.useEffect(() => {
     async function loadAlerts() {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/alerts/unread-count`, {
+        const res = await fetch(`${API_URL}/alerts/unread-count`, {
           cache: "no-store",
         });
 

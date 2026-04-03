@@ -22,4 +22,9 @@ export class AlertsController {
     await this.alertsService.markRead(id);
     return { ok: true };
   }
+
+  @Get("unread-count")
+  getUnreadCount() {
+    return this.alertsService.getUnreadCount();
+  }
 }

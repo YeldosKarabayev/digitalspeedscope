@@ -112,6 +112,16 @@ export class AlertsService {
         return { ok: true };
     }
 
+    async getUnreadCount() {
+        const count = await this.prisma.alert.count({
+            where: {
+                isRead: false,
+            },
+        });
+
+        return { count };
+    }
+
     async createAlert(input: {
         type: string;
         severity: "INFO" | "WARNING" | "ERROR";
