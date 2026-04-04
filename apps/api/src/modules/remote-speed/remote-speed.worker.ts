@@ -17,10 +17,16 @@ type JobWithDevice = Awaited<
   device?: any;
 };
 
-function calcStatus(pingMs: number | null, packetLoss: number | null) {
+function calcStatus(
+  pingMs: number | null,
+  packetLoss: number | null,
+  realDownloadMbps: number | null,
+) {
   if (pingMs == null || pingMs <= 0) return "POOR";
   if ((packetLoss ?? 0) >= 5 || pingMs >= 150) return "POOR";
+  if (realDownloadMbps != null && realDownloadMbps < 5) return "POOR";
   if ((packetLoss ?? 0) >= 2 || pingMs >= 80) return "FAIR";
+  if (realDownloadMbps != null && realDownloadMbps < 20) return "FAIR";
   if (pingMs >= 35) return "GOOD";
   return "EXCELLENT";
 }
@@ -640,7 +646,7 @@ export class RemoteSpeedWorker {
           pingMs: health.latencyMs ?? 0,
           jitterMs: null,
           packetLoss: 0,
-          status: calcStatus(health.latencyMs ?? 0, 0) as any,
+          status: calcStatus(health.latencyMs ?? 0, 0, realDownloadMbps)
         } as any,
       });
 

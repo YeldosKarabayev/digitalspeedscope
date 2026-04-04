@@ -227,6 +227,8 @@ function Sidebar({
 }) {
   const pathname = useClientPathname();
   const router = useRouter();
+  const hasCritical = alertsCount > 0;
+
 
   return (
     <aside
@@ -287,7 +289,7 @@ function Sidebar({
                       <Icon
                         className={cn(
                           "h-4 w-4",
-                          active ? "text-indigo-300" : "text-slate-400 group-hover:text-slate-200"
+                          hasCritical ? "text-red-400 animate-pulse" : "text-slate-400"
                         )}
                       />
 
@@ -303,7 +305,7 @@ function Sidebar({
                                   : "border-slate-700 bg-slate-900/60 text-slate-200/70"
                               )}
                             >
-                              {alertsCount}
+                              {alertsCount > 99 ? "99+" : alertsCount}
                             </span>
                           )}
                         </div>
