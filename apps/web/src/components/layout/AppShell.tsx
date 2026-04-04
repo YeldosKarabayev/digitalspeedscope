@@ -227,7 +227,6 @@ function Sidebar({
 }) {
   const pathname = useClientPathname();
   const router = useRouter();
-  const hasCritical = alertsCount > 0;
 
 
   return (
@@ -243,11 +242,11 @@ function Sidebar({
           <div className="flex items-center justify-between gap-2">
             <Link href="/dashboard" className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
-                <span className="text-sm font-semibold">DS</span>
+                <span className="text-sm font-semibold">NP</span>
               </div>
               {!collapsed && (
                 <div className="leading-tight">
-                  <div className="text-sm font-semibold text-slate-100">DigitalSpeedScope</div>
+                  <div className="text-sm font-semibold text-slate-100">NetPulse</div>
                   <div className="text-xs text-slate-400">Network Analytics</div>
                 </div>
               )}
@@ -274,6 +273,8 @@ function Sidebar({
               {NAV.map((item) => {
                 const active = isActiveRoute(pathname, item.href);
                 const Icon = item.icon;
+                const isAlertsItem = item.label === "Оповещения";
+                const shouldPulse = isAlertsItem && alertsCount > 0;
 
                 return (
                   <Link key={item.href} href={item.href} className="block">
@@ -289,7 +290,11 @@ function Sidebar({
                       <Icon
                         className={cn(
                           "h-4 w-4",
-                          hasCritical ? "text-red-400 animate-pulse" : "text-slate-400"
+                          shouldPulse
+                            ? "text-red-400 animate-pulse"
+                            : active
+                              ? "text-indigo-300"
+                              : "text-slate-400 group-hover:text-slate-200"
                         )}
                       />
 
